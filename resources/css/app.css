@@ -1,0 +1,43 @@
+/* @import 'tailwindcss'; */
+@import 'bootstrap/dist/css/bootstrap.min.css';
+@import 'bootstrap-icons/font/bootstrap-icons.css';
+@import 'datatables.net-dt';
+
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source "../**/*.blade.php";
+@source "../**/*.js";
+@source "../**/*.vue";
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+/* 您的自定義樣式 */
+
+
+.logo {
+    width: 150px;
+    height: 150px;
+    background-color: #f0f1f7;
+    /* display: flex; */
+    /* align-items: center; */
+    /* justify-content: center; */
+    border-radius: 5px;
+}
+
+
+.logo-image{
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.container-fluid{
+    padding: 0;
+}
+
+.dropdown-toggle::after{
+    content:none;
+}
