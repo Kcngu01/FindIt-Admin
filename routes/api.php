@@ -95,6 +95,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('/items/delete/{id}', [ApiController::class, 'deleteItem']);
         Route::post('/items/claim',[ApiController::class,'claimItem']);
         Route::post('/items/claim/check', [ApiController::class, 'checkClaim']);
+        
+        // Image similarity routes
+        Route::post('/items/similarity/{id}', [App\Http\Controllers\API\ImageSimilarityController::class, 'processItemImage']);
     });
 
     Route::get('/claims/student/{id}',[ApiController::class, 'getAllClaims']);
@@ -124,7 +127,7 @@ Route::prefix('/characteristics')->as('characteristics.')->middleware(['auth:san
     Route::get('/colours/{id}', [$controller, 'getColourById']);
 });
 
-
+ 
 
 
 

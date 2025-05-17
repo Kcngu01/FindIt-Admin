@@ -17,6 +17,7 @@ use App\Models\Student;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
+use App\Http\Controllers\API\ImageSimilarityController;
 
 class ApiController extends Controller
 {
@@ -248,25 +249,85 @@ class ApiController extends Controller
 
 
     public function createItem(Request $request){
-        $data = $request->all();
-        
-        if ($request->hasFile('image')) {
-            $file = $request->file('image');
-            $filename = time() . '_' . $file->getClientOriginalName();
-            if($data['type'] == 'lost'){
-                $path = $file->storeAs('lost_items', $filename,'public');
-            }else if($data['type'] == 'found'){
-                $path = $file->storeAs('found_items', $filename,'public');
+        try {
+            // Validate request data
+            $validator = Validator::make($request->all(), [
+                'name' => 'required|string|max:255',
+                'description' => 'nullable|string',
+                'type' => 'required|string|in:lost,found',
+                'category_id' => 'required|exists:categories,id',
+                'color_id' => 'required|exists:colours,id',
+                'location_id' => 'required|exists:locations,id',
+                'student_id' => 'required|exists:students,id',
+                'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:5120',
+            ]);
+            
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'errors' => $validator->errors()
+                ], 422);
             }
-            $data['image'] = $filename;
+            
+            $data = $request->all();
+            
+            // Handle image upload
+            if ($request->hasFile('image')) {
+                $file = $request->file('image');
+                $filename = time() . '_' . $file->getClientOriginalName();
+                if($data['type'] == 'lost'){
+                    $path = $file->storeAs('lost_items', $filename,'public');
+                }else if($data['type'] == 'found'){
+                    $path = $file->storeAs('found_items', $filename,'public');
+                }
+                $data['image'] = $filename;
+            }
+            
+            // Create the item (without embeddings for now)
+            $item = Item::create($data);
+            
+            // Process image similarity if image was uploaded
+            if ($request->hasFile('image')) {
+                $imageSimilarityController = new ImageSimilarityController();
+                $similarityResult = $imageSimilarityController->processItemImage($request, $item);
+                
+                // Save embedding to the item
+                if (isset($similarityResult['embedding']) && $similarityResult['embedding']) {
+                    $item->image_embeddings = $similarityResult['embedding'];
+                    $item->save();
+                }
+                
+                // Create matches if any found with enough similarity
+                if (isset($similarityResult['matches']) && !empty($similarityResult['matches'])) {
+                    $imageSimilarityController->createMatches($item, $similarityResult['matches']);
+                    
+                    // Return with match information
+                    return response()->json([
+                        'success' => true,
+                        'item' => $item,
+                        'similarity_matches' => count($similarityResult['matches']),
+                        'message' => 'Item created successfully with ' . count($similarityResult['matches']) . ' potential matches'
+                    ]);
+                }
+            }
+            
+            // Return success if we got this far
+            return response()->json([
+                'success' => true,
+                'item' => $item,
+                'message' => 'Item created successfully'
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Error creating item', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while creating the item: ' . $e->getMessage()
+            ], 500);
         }
-        
-        $item = Item::create($data);
-        
-        return response()->json([
-            'success' => true,
-            'item' => $item
-        ]);
     }
 
     public function getItemById($id){
