@@ -18,9 +18,22 @@ use Illuminate\Auth\Events\Registered;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Controllers\API\ImageSimilarityController;
+use App\Services\MatchNotificationService;
+use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Str;
+use Carbon\Carbon;
+use App\Models\FcmToken;
+use Laravel\Sanctum\HasApiTokens;
 
 class ApiController extends Controller
 {
+    protected $notificationService;
+
+    public function __construct(MatchNotificationService $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
+
     /**
      * Display a listing of the resource.
      */
@@ -288,7 +301,7 @@ class ApiController extends Controller
             
             // Process image similarity if image was uploaded
             if ($request->hasFile('image')) {
-                $imageSimilarityController = new ImageSimilarityController();
+                $imageSimilarityController = app(ImageSimilarityController::class);
                 $similarityResult = $imageSimilarityController->processItemImage($request, $item);
                 
                 // Save embedding to the item
@@ -299,7 +312,7 @@ class ApiController extends Controller
                 
                 // Create matches if any found with enough similarity
                 if (isset($similarityResult['matches']) && !empty($similarityResult['matches'])) {
-                    $imageSimilarityController->createMatches($item, $similarityResult['matches']);
+                    // The ImageSimilarityController now handles creating matches and sending notifications
                     
                     // Return with match information
                     return response()->json([
@@ -308,7 +321,13 @@ class ApiController extends Controller
                         'similarity_matches' => count($similarityResult['matches']),
                         'message' => 'Item created successfully with ' . count($similarityResult['matches']) . ' potential matches'
                     ]);
+                } else if ($data['type'] == 'lost') {
+                    // Send notification for lost item with no matches
+                    $this->notificationService->sendNoMatchesNotification($item);
                 }
+            } else if ($data['type'] == 'lost') {
+                // If no image was uploaded for a lost item, send "no matches" notification
+                $this->notificationService->sendNoMatchesNotification($item);
             }
             
             // Return success if we got this far
@@ -597,9 +616,69 @@ class ApiController extends Controller
         }
     }
 
+    public function getPotentialMatches(int $itemId){
+        $item = Item::find($itemId);
+        
+        if (!$item) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Item not found'
+            ], 404);
+        }
+        
+        // Determine if this is a lost or found item to query the correct matches
+        if ($item->type == 'lost') {
+            $potentialMatches = ItemMatch::where('lost_item_id', $itemId)
+                ->with('foundItem', 'foundItem.category', 'foundItem.color', 'foundItem.location', 'foundItem.student')
+                ->get();
+        }
+        
+        return response()->json([
+            'success' => true,
+            'matches' => $potentialMatches
+        ]);
+    }
+
+    public function getStudentClaimsbyPotentialMatches(int $studentId, int $itemId){
+        $item = Item::find($itemId);
+        
+        if (!$item) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Item not found'
+            ], 404);
+        }
+        
+        // Determine if this is a lost or found item to query the correct matches
+        if ($item->type == 'lost') {
+            $claims = Claim::where('lost_item_id', $itemId)
+                ->where('student_id', $studentId)
+                ->with('foundItem', 'foundItem.category', 'foundItem.color', 'foundItem.location', 'foundItem.student', 'match')
+                ->get();
+        }
+        
+        return response()->json([
+            'success' => true,
+            'claims' => $claims
+        ]);
+    }
+
     public function claimItem(Request $request){
         $data = $request->all();
         $claim = Claim::create($data);
+        return response()->json([
+            'success' => true,
+            'claim' => $claim
+        ]);
+    }
+
+    public function claimItemByMatch(Request $request){
+        $data = $request->all();
+        $claim = Claim::create($data);
+        $match =ItemMatch::find($request->match_id);
+        $match->status = 'pending';
+        $match->save();
+        
         return response()->json([
             'success' => true,
             'claim' => $claim

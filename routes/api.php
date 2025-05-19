@@ -93,13 +93,20 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/items/edit/{id}', [ApiController::class, 'updateItem']);
         Route::post('/items/edit/{id}', [ApiController::class, 'updateItem']);
         Route::delete('/items/delete/{id}', [ApiController::class, 'deleteItem']);
+        //claim item directly
         Route::post('/items/claim',[ApiController::class,'claimItem']);
+        //claim item from potential matches
+        Route::post('/items/claim/match',[ApiController::class,'claimItemByMatch']);
         Route::post('/items/claim/check', [ApiController::class, 'checkClaim']);
         
         // Image similarity routes
         Route::post('/items/similarity/{id}', [App\Http\Controllers\API\ImageSimilarityController::class, 'processItemImage']);
+        Route::get('/items/potential-matches/{itemId}', [ApiController::class, 'getPotentialMatches']);
+        //get all claims based on potential matches on a lost item 
+        Route::get('/items/potential-matches/claims/{studentId}/{itemId}', [ApiController::class, 'getStudentClaimsbyPotentialMatches']);
     });
 
+    //get all claims based on student id
     Route::get('/claims/student/{id}',[ApiController::class, 'getAllClaims']);
     Route::get('/claim/details/{id}',[ApiController::class,'getClaimDetails']);
     Route::post('/fcm-token', [FcmTokenController::class, 'register']);

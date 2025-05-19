@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\Item;
 use App\Models\ItemMatch;
+use App\Services\MatchNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -14,7 +15,20 @@ use Illuminate\Support\Facades\Validator;
 class ImageSimilarityController extends Controller
 {
     // URL to your FastAPI service - would typically be in .env
-    private $fastApiUrl = "https://02f5-34-69-54-2.ngrok-free.app"; // Update with actual Colab URL
+    private $fastApiUrl = "https://af00-34-16-203-88.ngrok-free.app"; // Update with actual Colab URL
+    
+    /**
+     * MatchNotificationService for sending notifications
+     */
+    private $notificationService;
+
+    /**
+     * Constructor to inject dependencies
+     */
+    public function __construct(MatchNotificationService $notificationService)
+    {
+        $this->notificationService = $notificationService;
+    }
     
     /**
      * Process new item image for similarity matching
@@ -29,6 +43,12 @@ class ImageSimilarityController extends Controller
             // Validate image exists
             if (!$request->hasFile('image')) {
                 Log::info('No image provided for similarity processing');
+                
+                // If this is a lost item, send a "no matches" notification immediately
+                if ($item->type === 'lost') {
+                    $this->notificationService->sendNoMatchesNotification($item);
+                }
+                
                 return [
                     'success' => true,
                     'message' => 'No image provided for similarity processing',
@@ -54,6 +74,11 @@ class ImageSimilarityController extends Controller
                 Log::info('No related items found for comparison');
                 $embedding = $this->getImageEmbedding($file);
                 
+                // If this is a lost item, send a "no matches" notification
+                if ($item->type === 'lost') {
+                    $this->notificationService->sendNoMatchesNotification($item);
+                }
+                
                 return [
                     'success' => true,
                     'message' => 'No related items found for comparison',
@@ -76,6 +101,14 @@ class ImageSimilarityController extends Controller
             // Make request to FastAPI service with patch embeddings support
             $imageBase64 = $this->encodeImage($file);
             $matches = $this->compareSimilarity($imageBase64, $storedEmbeddings);
+            
+            // Create match records and send notifications if needed
+            if (isset($matches['matches']) && !empty($matches['matches'])) {
+                $this->createMatches($item, $matches['matches']);
+            } else if ($item->type === 'lost') {
+                // If this is a lost item and no matches, send notification
+                $this->notificationService->sendNoMatchesNotification($item);
+            }
             
             return $matches;
             
@@ -104,6 +137,8 @@ class ImageSimilarityController extends Controller
     public function createMatches(Item $item, array $matches)
     {
         try {
+            $createdMatches = [];
+            
             // Iterate through matches
             foreach ($matches as $match) {
                 $matchData = [
@@ -121,10 +156,16 @@ class ImageSimilarityController extends Controller
                 }
                 
                 // Create the match record
-                ItemMatch::create($matchData);
+                $createdMatch = ItemMatch::create($matchData);
+                $createdMatches[] = $createdMatch;
+                
+                // Send notification to the student who reported the lost item
+                $this->notificationService->sendMatchNotification($createdMatch);
             }
             
             Log::info('Created ' . count($matches) . ' match records for item #' . $item->id);
+            
+            return $createdMatches;
             
         } catch (\Exception $e) {
             Log::error('Error creating match records', [
