@@ -9,6 +9,7 @@ use App\Http\Controllers\LocationController;
 use App\Http\Controllers\API\PasswordResetController;
 use App\Http\Controllers\ClaimReviewController;
 use App\Http\Controllers\ClaimHistoryController;
+use App\Http\Controllers\DashboardController;
 
 
 // Route::get('/', function () {
@@ -22,9 +23,7 @@ Route::middleware('guest')->group(function(){
 });
 
 Route::post('/logout',[LoginController::class,'logout'])->name('logout');
-Route::get('/dashboard',function(){
-    return view('dashboard');
-})->middleware('auth')->name('dashboard');
+Route::get('/dashboard', [DashboardController::class, 'index'])->middleware('auth')->name('dashboard');
 
 Route::get('/reset-password/{id}/{hash}', [PasswordResetController::class, 'showResetForm'])
     ->name('password.reset');
