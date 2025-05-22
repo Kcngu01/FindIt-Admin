@@ -30,7 +30,41 @@
 
         /* Submenu styling */
         .collapse .nav-link {
-            font-size: 0.9rem;
+            font-size: 1rem;
+        }
+        
+        /* Logo styling - centered properly */
+        .logo-container {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            padding: 1rem 0;
+        }
+        
+        .logo-image {
+            max-width: 120px;
+            height: auto;
+        }
+        
+        /* Ensure offcanvas header layout is proper */
+        .offcanvas-header {
+            position: relative;
+            padding: 0.5rem;
+        }
+        
+        .offcanvas-header .btn-close {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+        }
+        
+        /* User info - display only style */
+        .user-info-display {
+            padding: 0.25rem 1.5rem;
+            cursor: default;
+            color: #212529;
+            background-color: transparent;
+            border: none;
         }
     </style>
 
@@ -49,7 +83,8 @@
         </button>
         <!-- User profile picture placeholder using only Bootstrap classes -->
         <div class="dropdown me-2">
-            <div class="dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+        <!-- only close the dropdown when clicking outside the dropdown area     -->
+        <div class="dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
                 @if(isset($admin) && $admin->profile_image)
                     <img src="{{ asset('storage/'.$admin->profile_image)}}" alt="Profile Picture" class="rounded-circle" width="40" height="40">
                 @else
@@ -59,10 +94,11 @@
                 @endif
             </div>
 
-            <div class="dropdown-menu text-center ">
-                <h5 class="dropdown-item">{{$userName}}</h6>
-                <h6 class="dropdown-item text-secondary">{{$emailAddress}}</h6>
-                <h6 class="dropdown-item text-secondary">User ID:{{Auth::id()}}</h6>
+            <div class="dropdown-menu text-center">
+            <!-- prevents the click event from bubbling up to the dropdown container, which would otherwise cause it to close -->
+                <div class="user-info-display fw-bold" onclick="event.stopPropagation();">{{$userName}}</div>
+                <div class="user-info-display text-secondary" onclick="event.stopPropagation();">{{$emailAddress}}</div>
+                <div class="user-info-display text-secondary" onclick="event.stopPropagation();">User ID: {{Auth::id()}}</div>
                 <hr class="dropdown-divider">
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
@@ -76,50 +112,48 @@
 
     <!-- Offcanvas component for navigation -->
     <div class="offcanvas offcanvas-start" tabindex="-1" id="offcanvasExample" aria-labelledby="offcanvasExampleLabel">
-    <div class="offcanvas-header">
-        <!-- <h5 class="offcanvas-title" id="offcanvasExampleLabel">Navigation</h5> -->
-        <div class="d-flex justify-content-between align-items-center w-100">
-            <div class="logo">
+        <div class="offcanvas-header">
+            <!-- Centered logo -->
+            <div class="logo-container">
                 <img src="{{ asset('images/logo.png')}}" alt="logo" class="logo-image">
             </div>
-            <button type="button" class="btn-close align-self-start" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
         </div>
-    </div>
-    <div class="offcanvas-body">
-        <ul class="nav flex-column">
-        <li class="nav-item">
-            <a class="nav-link" aria-current="page" href="{{route('dashboard')}}">Dashboard</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{{route('students.index')}}">Student</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link collapsed" href="#itemCharacteristics" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="itemCharacteristics">
-                Item Characteristics
-                <i class="bi bi-chevron-down arrow"></i>
-            </a>
-            <div class="collapse" id="itemCharacteristics">
-                <ul class="nav flex-column ps-3">
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{route('category.index')}}">Category</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{route('colour.index')}}">Colour</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{route('location.index')}}">Location</a>
-                    </li>
-                </ul>
-            </div>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{{ route('claim.index') }}">Claim Review</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{{ route('claim-history.index') }}">Claim Approval History</a>
-        </li>   
-        </ul>
-    </div>
+        <div class="offcanvas-body">
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link" aria-current="page" href="{{route('dashboard')}}">Dashboard</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{route('students.index')}}">Student</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link collapsed" href="#itemCharacteristics" data-bs-toggle="collapse" role="button" aria-expanded="false" aria-controls="itemCharacteristics">
+                        Item Characteristics
+                        <i class="bi bi-chevron-down arrow"></i>
+                    </a>
+                    <div class="collapse" id="itemCharacteristics">
+                        <ul class="nav flex-column ps-3">
+                            <li class="nav-item">
+                                <a class="nav-link" href="{{route('category.index')}}">Category</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="{{route('colour.index')}}">Colour</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="{{route('location.index')}}">Location</a>
+                            </li>
+                        </ul>
+                    </div>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ route('claim.index') }}">Claim Review</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ route('claim-history.index') }}">Claim Approval History</a>
+                </li>   
+            </ul>
+        </div>
     </div>
 
     <!-- Main content area to be pushed -->
