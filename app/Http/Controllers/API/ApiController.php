@@ -45,11 +45,12 @@ class ApiController extends Controller
     public function register(Request $request){
         $credentials = $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|string|email|unique:students|regex:/^[a-zA-Z0-9._%+-]+@siswa\.unimas\.my$/',
-            'password' => 'required|string|min:8',
+            'email' => 'required|string|email|unique:students|regex:/^[0-9]+@siswa\.unimas\.my$/',
+            'password' => 'required|string|min:8'|'regex:/[A-Z]/'|'regex:/[a-z]/'|'regex:[0-9]'|'regex:/[^a-zA-Z0-9]/',
             'matric_no' => 'required|integer|unique:students,matric_no',
         ],[
             'email.regex' => 'The email must end with @siswa.unimas.my',
+            'password.regex' => 'The password must contain at least one uppercase letter, one lowercase letter, one number, and one special character.',
         ]);
 
         // Create the student with hashed password
@@ -146,9 +147,8 @@ class ApiController extends Controller
         $colourId = $request->input('color_id');
         $search = $request->input('search');
 
-
         if($type == 'lost'){
-            $query = Item::where('type', 'lost');
+            $query = Item::where('type', 'lost')->where('status', 'active');
             
             if ($categoryId) {
                 $query->where('category_id', $categoryId);
@@ -171,7 +171,7 @@ class ApiController extends Controller
             
             $items = $query->get();
         }else if($type == 'found'){
-            $query = Item::where('type', 'found');
+            $query = Item::where('type', 'found')->where('status', 'active');
             
             if ($categoryId) {
                 $query->where('category_id', $categoryId);
@@ -194,7 +194,8 @@ class ApiController extends Controller
             
             $items = $query->get();
         }else if($type == 'recovered'){
-            $query = Item::where('type', 'recovered');
+            // Get items with status 'resolved' instead of type 'recovered' 
+            $query = Item::where('status', 'resolved')->where('type', 'found');
             
             if ($categoryId) {
                 $query->where('category_id', $categoryId);
@@ -719,5 +720,60 @@ class ApiController extends Controller
             'success' => true,
             'claim' => $claim
         ]);
+    }
+
+    public function getMatchingLostItemsWithScore(int $foundItemId){
+        try {
+            // Find the found item
+            $foundItem = Item::findOrFail($foundItemId);
+            
+            // Check if this found item has an approved claim
+            $approvedClaim = Claim::where('found_item_id', $foundItemId)
+                                ->where('status', 'approved')
+                                ->first();
+            
+            if (!$approvedClaim) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'No approved claim exists for this found item',
+                    'lost_item' => null,
+                    'similarity_score' => null
+                ]);
+            }
+            
+            // If the claim has a match_id, get the match to find similarity score
+            $similarityScore = null;
+            if ($approvedClaim->match_id) {
+                $match = ItemMatch::find($approvedClaim->match_id);
+                if ($match) {
+                    $similarityScore = $match->similarity_score;
+                }
+            }
+            
+            // Get the lost item if it exists
+            $lostItem = null;
+            if ($approvedClaim->lost_item_id) {
+                $lostItem = Item::with(['category', 'color', 'location', 'student'])
+                                ->find($approvedClaim->lost_item_id);
+            }
+            
+            return response()->json([
+                'success' => true,
+                'lost_item' => $lostItem ?? null,
+                'similarity_score' => $similarityScore
+            ]);
+            
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Found item not found'
+            ], 404);
+        } catch (\Exception $e) {
+            Log::error('Error fetching matching lost item: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch matching lost item: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

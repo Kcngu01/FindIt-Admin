@@ -104,6 +104,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/items/potential-matches/{itemId}', [ApiController::class, 'getPotentialMatches']);
         //get all claims based on potential matches on a lost item 
         Route::get('/items/potential-matches/claims/{studentId}/{itemId}', [ApiController::class, 'getStudentClaimsbyPotentialMatches']);
+
+        // Get matching lost item with similarity score for a found item
+        Route::get('/items/found/matching-lost-item-with-score/{foundItemId}',[ApiController::class,'getMatchingLostItemsWithScore']);
     });
 
     //get all claims based on student id
