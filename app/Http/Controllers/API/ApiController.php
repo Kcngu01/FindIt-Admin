@@ -24,6 +24,7 @@ use Illuminate\Support\Str;
 use Carbon\Carbon;
 use App\Models\FcmToken;
 use Laravel\Sanctum\HasApiTokens;
+use App\Models\Admin;
 
 class ApiController extends Controller
 {
@@ -406,6 +407,33 @@ class ApiController extends Controller
         //
     }
 
+    public function checkItemRestriction(string $id){
+        $item = Item::find($id);
+
+        // Check if item can be edited based on matches and claims status
+        //item can only be edited if it does not involve in any pending, approved, or rejected matches
+        $hasRestrictedMatches = ItemMatch::where(function($query) use ($item) {
+            $query->where('lost_item_id', $item->id)
+                  ->orWhere('found_item_id', $item->id);
+        })
+        ->whereIn('status', ['pending', 'approved', 'rejected'])
+        ->exists();
+
+         // Check if item is involved in any claims (regardless of status)
+         $hasAnyClaims = Claim::where('found_item_id', $item->id)
+         ->orWhere('lost_item_id', $item->id)
+         ->exists();
+
+        if ($hasRestrictedMatches || $hasAnyClaims) {
+            return response()->json([
+                'success' => true,
+                'can_be_edited' => false,
+                'can_be_deleted' => false,
+                'restrictedReason' => $hasRestrictedMatches ? 'This item cannot be edited because it is involved in pending, approved, or rejected matches' : 'This item cannot be edited because it is involved in claims'
+            ]);
+        }
+    }
+
     public function updateItem(Request $request, string $id){
         try {
             // Get item
@@ -417,6 +445,36 @@ class ApiController extends Controller
                     'success' => false,
                     'message' => 'Item not found'
                 ], 404);
+            }
+
+            // Check if item can be edited based on matches and claims status
+            //item can only be edited if it does not involve in any pending, approved, or rejected matches
+            $hasRestrictedMatches = ItemMatch::where(function($query) use ($item) {
+                    $query->where('lost_item_id', $item->id)
+                          ->orWhere('found_item_id', $item->id);
+                })
+                ->whereIn('status', ['pending', 'approved', 'rejected'])
+                ->exists();
+                
+            if ($hasRestrictedMatches) {
+                Log::warning('Cannot edit item: involved in matches with restricted status', ['id' => $id]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This item cannot be edited because it is involved in pending, approved, or rejected matches'
+                ], 403);
+            }
+            
+            // Check if item is involved in any claims (regardless of status)
+            $hasAnyClaims = Claim::where('found_item_id', $item->id)
+                ->orWhere('lost_item_id', $item->id)
+                ->exists();
+                
+            if ($hasAnyClaims) {
+                Log::warning('Cannot edit item: involved in claims', ['id' => $id]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This item cannot be edited because it is involved in claims'
+                ], 403);
             }
             
             // For PATCH requests with multipart/form-data, extract fields directly
@@ -488,10 +546,12 @@ class ApiController extends Controller
                 ], 422);
             }
             
+            $imageChanged = false;
+            $oldImage = $item->image;
+            
             // Handle image upload if provided
             if ($request->hasFile('image')) {
                 try {
-                    $oldImage = $item->image;
                     $file = $request->file('image');
                     $filename = time() . '_' . $file->getClientOriginalName();
                     
@@ -502,6 +562,7 @@ class ApiController extends Controller
                     }
                     
                     $item->image = $filename;
+                    $imageChanged = true;
                     Log::info('Image uploaded successfully', ['filename' => $filename]);
                 } catch (\Exception $e) {
                     Log::error('Image upload failed', [
@@ -518,7 +579,9 @@ class ApiController extends Controller
             // Save the item
             try {
                 $item->save();
-                if ($request->hasFile('image') && !empty($oldImage)){
+                
+                // Delete old image if a new one was uploaded
+                if ($imageChanged && !empty($oldImage)){
                     $oldPath = ($item->type == 'lost')? 'lost_items/'.$oldImage : 'found_items/'.$oldImage;
                     if (Storage::disk('public')->exists($oldPath)) {
                         try {
@@ -531,8 +594,45 @@ class ApiController extends Controller
                             ]);
                         }
                     }
-                    Log::info('Item saved successfully', ['id' => $id]);
                 }
+                
+                // Only process image with FastAPI if the image was changed
+                if ($imageChanged && $request->hasFile('image')) {
+                    // First delete any existing matches to avoid duplicates
+                    ItemMatch::where(function($query) use ($item) {
+                        $query->where('lost_item_id', $item->id)
+                              ->orWhere('found_item_id', $item->id);
+                    })
+                    ->whereIn('status', ['available', 'dismissed'])
+                    ->delete();
+                    
+                    // Get the image similarity controller
+                    $imageSimilarityController = app(ImageSimilarityController::class);
+                    
+                    // Process the image to get embeddings and find matches
+                    // This will create new matches internally in the ImageSimilarityController
+                    $result = $imageSimilarityController->processItemImage($request, $item);
+                    
+                    // Update the item with the new embedding
+                    if (isset($result['embedding']) && !empty($result['embedding'])) {
+                        $item->image_embeddings = $result['embedding'];
+                        $item->save();
+                    }
+                    
+                    // Send a notification if no matches were found for a lost item
+                    if ($item->type === 'lost' && (!isset($result['matches']) || empty($result['matches']))) {
+                        $this->notificationService->sendNoMatchesNotification($item);
+                        Log::info('No matches found after image update, notification sent', ['item_id' => $item->id]);
+                    }
+                    
+                    Log::info('Image processed with FastAPI and embeddings updated', [
+                        'item_id' => $item->id,
+                        'has_embedding' => isset($result['embedding']) && !empty($result['embedding']),
+                        'matches_count' => isset($result['matches']) ? count($result['matches']) : 0
+                    ]);
+                }
+                
+                Log::info('Item saved successfully', ['id' => $id]);
             } catch (\Exception $e) {
                 Log::error('Failed to save item', [
                     'id' => $id,
@@ -582,6 +682,43 @@ class ApiController extends Controller
                     'message' => 'Item not found'
                 ], 404);
             }
+            
+            // Check if item can be deleted based on matches and claims status
+            $hasRestrictedMatches = ItemMatch::where(function($query) use ($item) {
+                    $query->where('lost_item_id', $item->id)
+                          ->orWhere('found_item_id', $item->id);
+                })
+                ->whereIn('status', ['pending', 'approved', 'rejected'])
+                ->exists();
+                
+            if ($hasRestrictedMatches) {
+                Log::warning('Cannot delete item: involved in matches with restricted status', ['id' => $id]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This item cannot be deleted because it is involved in pending, approved, or rejected matches'
+                ], 403);
+            }
+            
+            // Check if item is involved in any claims (regardless of status)
+            $hasAnyClaims = Claim::where('found_item_id', $item->id)
+                ->orWhere('lost_item_id', $item->id)
+                ->exists();
+                
+            if ($hasAnyClaims) {
+                Log::warning('Cannot delete item: involved in claims', ['id' => $id]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This item cannot be deleted because it is involved in claims'
+                ], 403);
+            }
+            
+            // Delete any available or dismissed matches for this item
+            ItemMatch::where(function($query) use ($item) {
+                    $query->where('lost_item_id', $item->id)
+                          ->orWhere('found_item_id', $item->id);
+                })
+                ->whereIn('status', ['available', 'dismissed'])
+                ->delete();
             
             $item->delete();
             $oldImage = $item->image;
