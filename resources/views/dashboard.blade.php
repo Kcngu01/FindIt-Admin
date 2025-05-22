@@ -6,6 +6,11 @@
     <h2 class="mb-3">Overview</h2>
     
     <div class="row g-4">
+        <!-- Data container (hidden) -->
+        <div id="dashboard-data" 
+             data-dashboard="{{ json_encode($dashboardData ?? []) }}"
+             style="display: none;"></div>
+             
         <!-- Registered Students Card -->
         <div class="col-md-6 col-lg-3">
             <div class="card">
@@ -42,12 +47,17 @@
             </div>
         </div>
 
-        <!-- recovery rate = successful claim/ total claims (successful + pending + rejected) -->
         <!-- Recovery Rate Card -->
         <div class="col-md-6 col-lg-3">
             <div class="card">
                 <div class="card-body">
-                    <h6 class="card-subtitle mb-2 text-muted">Recovery Rate</h6>
+                    <h6 class="card-subtitle mb-2 text-muted">
+                        Recovery Rate
+                        <i class="bi bi-info-circle-fill text-muted ms-1" 
+                           data-bs-toggle="tooltip" 
+                           data-bs-placement="top" 
+                           title="Recovery Rate = (Successful Claims ÷ Total Claims) × 100%"></i>
+                    </h6>
                     <div style="height: 180px; position: relative;">
                         <canvas id="recoveryRateChart"></canvas>
                     </div>
@@ -61,18 +71,25 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Data passed from the Laravel backend - accessed through Blade
-        const dashboardData = {!! json_encode($dashboardData ?? []) !!};
+        // Initialize all tooltips
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl)
+        });
+    
+        // Get data from HTML data attribute
+        const dashboardDataStr = document.getElementById('dashboard-data').dataset.dashboard;
+        const dashboardData = JSON.parse(dashboardDataStr || '{}');
         
-        // Extract values from the dashboardData or use defaults if data is not available
-        const registeredStudents = Math.round(dashboardData.registeredStudents ?? 0);
-        const pendingClaims = Math.round(dashboardData.pendingClaims ?? 0);
-        const claimedItems = Math.round(dashboardData.claimedItems ?? 0);
-        const recoveryRate = Math.round(dashboardData.recoveryRate ?? 0);
+        // Extract values and continue with the existing code
+        const registeredStudents = Math.round(dashboardData.registeredStudents || 0);
+        const pendingClaims = Math.round(dashboardData.pendingClaims || 0);
+        const claimedItems = Math.round(dashboardData.claimedItems || 0);
+        const recoveryRate = Math.round(dashboardData.recoveryRate || 0);
         
         // Monthly claimed data for trend chart - ensure all values are integers
-        const monthlyClaimedData = (dashboardData.monthlyClaimedData ?? [0, 0, 0]).map(val => Math.round(val));
-        const monthLabels = dashboardData.monthLabels ?? ['Jan', 'Feb', 'Mar'];
+        const monthlyClaimedData = (dashboardData.monthlyClaimedData || [0, 0, 0]).map(val => Math.round(val));
+        const monthLabels = dashboardData.monthLabels || ['Jan', 'Feb', 'Mar'];
         
         // Common chart options
         const commonOptions = {
@@ -265,7 +282,7 @@
         new Chart(document.getElementById('recoveryRateChart'), {
             type: 'doughnut',
             data: {
-                labels: ['Recovery Rate', 'Remaining'],
+                labels: ['Recovery Rate', 'Recovery Rate'],
                 datasets: [{
                     data: [recoveryRate, 100 - recoveryRate],
                     backgroundColor: ['#36b9cc', '#eaecf4'],
