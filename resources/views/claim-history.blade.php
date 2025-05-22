@@ -8,9 +8,9 @@
             <div class="mb-3 search-bar d-inline-block float-end"> 
                 <div class="input-group">
                     <input type="text" id="searchClaim" class="form-control" placeholder="ID/Matric no./Status">
-                    <button class="btn btn-outline-secondary" type="button" id="searchButton">
+                    <!-- <button class="btn btn-outline-secondary" type="button" id="searchButton">
                         <i class="bi bi-search"></i>
-                    </button>
+                    </button> -->
                 </div>
             </div>
 
@@ -67,9 +67,9 @@
             table.search($(this).val()).draw();
         })
 
-        $('#searchButton').on('click',function(){
-            table.search($('#searchClaim').val()).draw();
-        });
+        // $('#searchButton').on('click',function(){
+        //     table.search($('#searchClaim').val()).draw();
+        // });
         
     });
 </script>

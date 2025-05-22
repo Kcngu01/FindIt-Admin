@@ -8,9 +8,9 @@
             <div class="mb-3 search-bar d-inline-block float-end"> 
                 <div class="input-group">
                     <input type="text" id="searchStudent" class="form-control" placeholder="ID/Username/Email">
-                    <button class="btn btn-outline-secondary" type="button" id="searchButton">
+                    <!-- <button class="btn btn-outline-secondary" type="button" id="searchButton">
                         <i class="bi bi-search"></i>
-                    </button>
+                    </button> -->
                 </div>
             </div>
 
@@ -66,9 +66,9 @@
             table.search($(this).val()).draw();
         })
 
-        $('#searchButton').on('click',function(){
-            table.search($('#searchStudent').val()).draw();
-        });
+        // $('#searchButton').on('click',function(){
+        //     table.search($('#searchStudent').val()).draw();
+        // });
         
     });
 </script>
