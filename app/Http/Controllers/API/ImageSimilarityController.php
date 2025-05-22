@@ -15,7 +15,9 @@ use Illuminate\Support\Facades\Validator;
 class ImageSimilarityController extends Controller
 {
     // URL to your FastAPI service - would typically be in .env
-    private $fastApiUrl = "https://af00-34-16-203-88.ngrok-free.app"; // Update with actual Colab URL
+    private $fastApiUrl = "https://Kcngu01-FindIt-api.hf.space"; // Update with actual Colab URL
+    private $hfToken; // Will be loaded from .env
+
     
     /**
      * MatchNotificationService for sending notifications
@@ -28,6 +30,7 @@ class ImageSimilarityController extends Controller
     public function __construct(MatchNotificationService $notificationService)
     {
         $this->notificationService = $notificationService;
+        $this->hfToken = env('HUGGINGFACE_API_TOKEN'); // Load from .env
     }
     
     /**
@@ -190,7 +193,10 @@ class ImageSimilarityController extends Controller
             $imageBase64 = $this->encodeImage($file);
             
             // Make request to FastAPI service
-            $response = Http::post($this->fastApiUrl . '/compute_embedding', [
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $this->hfToken,
+                'Content-Type' => 'application/json',
+            ])->post($this->fastApiUrl . '/compute_embedding', [
                 'image' => $imageBase64
             ]);
             
@@ -228,7 +234,10 @@ class ImageSimilarityController extends Controller
     {
         try {
             // Make request to FastAPI service
-            $response = Http::post($this->fastApiUrl . '/compare_similarity', [
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $this->hfToken,
+                'Content-Type' => 'application/json',
+            ])->post($this->fastApiUrl . '/compare_similarity', [
                 'new_image' => $imageBase64,
                 'stored_embeddings' => $storedEmbeddings,
                 'threshold' => $threshold
