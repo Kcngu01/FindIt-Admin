@@ -44,23 +44,83 @@ class ApiController extends Controller
     }
 
     public function register(Request $request){
+        // Log the entire request for debugging
+        \Illuminate\Support\Facades\Log::info('Registration request data:', [
+            'all_data' => $request->all(),
+            'has_matric_no' => $request->has('matric_no'),
+            'matric_no_value' => $request->input('matric_no'),
+            'matric_no_type' => gettype($request->input('matric_no')),
+        ]);
+
+        // Make sure matric_no is present and is a valid integer
+        if (!$request->has('matric_no') || !is_numeric($request->input('matric_no'))) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Matric number is required and must be a valid number.',
+                'error_details' => [
+                    'provided_value' => $request->input('matric_no'),
+                    'type' => gettype($request->input('matric_no'))
+                ]
+            ], 422);
+        }
+
+        // Convert to int explicitly here
+        $matricNo = intval($request->input('matric_no'));
+        
+        // Validate after ensuring matric_no is an integer
         $credentials = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|unique:students|regex:/^[0-9]+@siswa\.unimas\.my$/',
-            'password' => 'required|string|min:8'|'regex:/[A-Z]/'|'regex:/[a-z]/'|'regex:[0-9]'|'regex:/[^a-zA-Z0-9]/',
+            'password' => 'required|string|min:8|regex:/[A-Z]/|regex:/[a-z]/|regex:/[0-9]/|regex:/[^a-zA-Z0-9]/',
             'matric_no' => 'required|integer|unique:students,matric_no',
         ],[
             'email.regex' => 'The email must end with @siswa.unimas.my',
             'password.regex' => 'The password must contain at least one uppercase letter, one lowercase letter, one number, and one special character.',
+            'matric_no.required' => 'The matric number is required.',
+            'matric_no.integer' => 'The matric number must be an integer.',
         ]);
 
         // Create the student with hashed password
-        $student = Student::create([
-            'name' => $credentials['name'],
-            'email' => $credentials['email'],
-            'password' => Hash::make($credentials['password']),
-            'matric_no' => $credentials['matric_no'],
-        ]);
+        try {
+            // Log before create attempt
+            \Illuminate\Support\Facades\Log::info('Attempting to create student with matric_no:', [
+                'matric_no' => $matricNo,
+                'type' => gettype($matricNo)
+            ]);
+            
+            // Create student record
+            $student = new Student();
+            $student->name = $credentials['name'];
+            $student->email = $credentials['email'];
+            $student->password = Hash::make($credentials['password']);
+            $student->matric_no = $matricNo;
+            $student->save();
+            
+            // Log successful creation
+            \Illuminate\Support\Facades\Log::info('Student created successfully:', [
+                'id' => $student->id,
+                'matric_no' => $student->matric_no
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Student creation error: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+                'matric_no' => $matricNo,
+                'matric_no_type' => gettype($matricNo)
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Registration failed: ' . $e->getMessage(),
+                'error_details' => [
+                    'exception_type' => get_class($e),
+                    'matric_no' => $matricNo,
+                    'matric_no_type' => gettype($matricNo)
+                ]
+            ], 422);
+        }
 
         // Generate API token for the student
         $token = $student->createToken('auth_token')->plainTextToken;
@@ -170,7 +230,7 @@ class ApiController extends Controller
                 });
             }
             
-            $items = $query->get();
+            $items = $query->with(['category', 'color', 'location', 'student', 'claimLocation'])->get();
         }else if($type == 'found'){
             $query = Item::where('type', 'found')->where('status', 'active');
             
@@ -193,7 +253,7 @@ class ApiController extends Controller
                 });
             }
             
-            $items = $query->get();
+            $items = $query->with(['category', 'color', 'location', 'student', 'claimLocation'])->get();
         }else if($type == 'recovered'){
             // Get items with status 'resolved' instead of type 'recovered' 
             $query = Item::where('status', 'resolved')->where('type', 'found');
@@ -217,9 +277,9 @@ class ApiController extends Controller
                 });
             }
             
-            $items = $query->get();
+            $items = $query->with(['category', 'color', 'location', 'student', 'claimLocation'])->get();
         }else{
-            $items = Item::all();
+            $items = Item::with(['category', 'color', 'location', 'student', 'claimLocation'])->get();
         }
 
         return response()->json([
@@ -231,7 +291,10 @@ class ApiController extends Controller
     function getItemsByStudentId(Request $request){
         $studentId = $request->input('student_id');
         $type = $request->input('type');
-        $items = Item::where('student_id', $studentId)->where('type', $type)->get();
+        $items = Item::where('student_id', $studentId)
+                    ->where('type', $type)
+                    ->with(['category', 'color', 'location', 'claimLocation'])
+                    ->get();
         return response()->json([
             'success' => true,
             'items' => $items
@@ -262,6 +325,13 @@ class ApiController extends Controller
         ]);
     }
 
+    public function getFaculties(){
+        $faculties = \App\Models\Faculty::all();
+        return response()->json([
+            'success' => true,
+            'faculties' => $faculties
+        ]);
+    }
 
     public function createItem(Request $request){
         try {
@@ -274,6 +344,7 @@ class ApiController extends Controller
                 'color_id' => 'required|exists:colours,id',
                 'location_id' => 'required|exists:locations,id',
                 'student_id' => 'required|exists:students,id',
+                'claim_location_id' => 'nullable|exists:faculties,id',
                 'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:5120',
             ]);
             
@@ -352,7 +423,7 @@ class ApiController extends Controller
     }
 
     public function getItemById($id){
-        $item = Item::find($id);
+        $item = Item::with(['category', 'color', 'location', 'student', 'claimLocation'])->find($id);
         return response()->json([
             'success' => true,
             'item' => $item
@@ -531,6 +602,7 @@ class ApiController extends Controller
                 'category_id' => 'sometimes|exists:categories,id',
                 'color_id' => 'sometimes|exists:colours,id',
                 'location_id' => 'sometimes|exists:locations,id',
+                'claim_location_id' => 'sometimes|nullable|exists:faculties,id',
                 'type' => 'sometimes|string|in:lost,found',
                 'image' => 'sometimes|image|mimes:jpeg,png,jpg,gif|max:2048',
             ]);
@@ -767,7 +839,14 @@ class ApiController extends Controller
         // Determine if this is a lost or found item to query the correct matches
         if ($item->type == 'lost') {
             $potentialMatches = ItemMatch::where('lost_item_id', $itemId)
-                ->with('foundItem', 'foundItem.category', 'foundItem.color', 'foundItem.location', 'foundItem.student')
+                ->with([
+                    'foundItem', 
+                    'foundItem.category', 
+                    'foundItem.color', 
+                    'foundItem.location', 
+                    'foundItem.student',
+                    'foundItem.claimLocation'
+                ])
                 ->get();
         }
         
@@ -791,7 +870,15 @@ class ApiController extends Controller
         if ($item->type == 'lost') {
             $claims = Claim::where('lost_item_id', $itemId)
                 ->where('student_id', $studentId)
-                ->with('foundItem', 'foundItem.category', 'foundItem.color', 'foundItem.location', 'foundItem.student', 'match')
+                ->with([
+                    'foundItem', 
+                    'foundItem.category', 
+                    'foundItem.color', 
+                    'foundItem.location', 
+                    'foundItem.student', 
+                    'foundItem.claimLocation',
+                    'match'
+                ])
                 ->get();
         }
         
@@ -816,6 +903,12 @@ class ApiController extends Controller
         $match =ItemMatch::find($request->match_id);
         $match->status = 'pending';
         $match->save();
+
+        //all other matches with status 'available' for this lost item should be dismissed
+        ItemMatch::where('lost_item_id', $request->lost_item_id)
+            ->where('status', 'available')
+            ->update(['status' => 'dismissed']);
+        
         
         return response()->json([
             'success' => true,
@@ -843,7 +936,15 @@ class ApiController extends Controller
 
     // retrieve all claims of a student
     public function getAllClaims(int $studentId){
-        $claims = Claim::where('student_id', $studentId)->with('foundItem')->get();
+        $claims = Claim::where('student_id', $studentId)
+                        ->with([
+                            'foundItem',
+                            'foundItem.category',
+                            'foundItem.color',
+                            'foundItem.location',
+                            'foundItem.claimLocation'
+                        ])
+                        ->get();
         return response()->json([
             'success' => true,
             'claims' => $claims,
@@ -851,7 +952,15 @@ class ApiController extends Controller
     }
 
     public function getClaimDetails(int $id){
-        $claim = Claim::with(['foundItem','student','admin','foundItem.category','foundItem.color','foundItem.location'])->find($id);
+        $claim = Claim::with([
+            'foundItem',
+            'foundItem.category',
+            'foundItem.color',
+            'foundItem.location',
+            'foundItem.claimLocation',
+            'student',
+            'admin'
+        ])->find($id);
 
         return response()->json([
             'success' => true,
@@ -866,7 +975,10 @@ class ApiController extends Controller
             
             // Check if this found item has an approved claim
             $approvedClaim = Claim::where('found_item_id', $foundItemId)
-                                ->where('status', 'approved')
+                                ->where(function($query) {
+                                    $query->where('status', 'approved')
+                                          ->orWhere('status', 'claimed');
+                                })
                                 ->first();
             
             if (!$approvedClaim) {
@@ -910,6 +1022,128 @@ class ApiController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch matching lost item: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Change user password
+     * 
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function changePassword(Request $request)
+    {
+        // Validate request data
+        $request->validate([
+            'current_password' => 'required|string',
+            'password' => [
+                'required',
+                'string',
+                'min:8',
+                'confirmed',
+                'regex:/[A-Z]/', // at least one uppercase letter
+                'regex:/[a-z]/', // at least one lowercase letter
+                'regex:/[0-9]/', // at least one number
+                'regex:/[^a-zA-Z0-9]/' // at least one special character
+            ],
+            'password_confirmation' => 'required|string',
+        ], [
+            'password.regex' => 'The password must contain at least one uppercase letter, one lowercase letter, one number, and one special character.',
+        ]);
+
+        // Get the authenticated user
+        $user = $request->user();
+        
+        // Check if the current password is correct
+        if (!Hash::check($request->current_password, $user->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Current password is incorrect',
+            ], 401);
+        }
+
+        try {
+            // Update the user's password
+            $user->password = Hash::make($request->password);
+            $user->save();
+            
+            // Log the password change
+            \Illuminate\Support\Facades\Log::info('Password changed successfully for user', [
+                'user_id' => $user->id,
+                'email' => $user->email
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Password changed successfully',
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Password change failed', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to change password: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function changeUsername(Request $request){
+        // Validate the request
+        //  you can customize exactly how validation errors are returned to the client
+        // format the JSON response with specific structure (success: false, custom HTTP status code 422)
+         // With $request->validate(), the exception handler would determine the response format, which might not match the API's consistent error structure
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255|unique:students,name',
+        ]);
+
+        // If validation fails, return error response
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            // Get the authenticated user
+            $user = $request->user();
+            
+            // Update the username (name field)
+            $user->name = $request->name;
+            $user->save();
+            
+            // Log the username change
+            \Illuminate\Support\Facades\Log::info('Username changed successfully for user', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+                'new_name' => $user->name
+            ]);
+            
+            // Return the updated user object
+            return response()->json([
+                'success' => true,
+                'message' => 'Username changed successfully',
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'matric_no' => $user->matric_no,
+                'email_verified' => !is_null($user->email_verified_at),
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Username change failed', [
+                'user_id' => $request->user()->id,
+                'email' => $request->user()->email,
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to change username: ' . $e->getMessage(),
             ], 500);
         }
     }

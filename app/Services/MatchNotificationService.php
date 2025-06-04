@@ -118,7 +118,7 @@ class MatchNotificationService
             
             // Prepare notification content
             $title = 'Lost Item Reported';
-            $body = "Your {$lostItem->name} has been reported as lost. We'll notify you when potential matches are found.";
+            $body = "Your {$lostItem->name} has been reported as lost. We'll notify you when potential matches are found if you have attached image in your report.";
             
             // Additional data for the app to process
             $data = [

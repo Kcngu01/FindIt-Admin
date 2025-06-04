@@ -19,7 +19,7 @@ Route::post('/register', [ApiController::class,'register'])->name('register');
 
 // Email verification routes
 Route::get('/email/verify/{id}/{hash}', [VerificationController::class, 'verify'])
-    ->name('verification.verify');
+    ->name('verification.verify');      
 Route::post('/email/verification-notification', [VerificationController::class, 'resend'])
     ->middleware(['auth:sanctum', 'throttle:6,1'])
     ->name('verification.send');
@@ -84,6 +84,10 @@ Route::middleware('auth:sanctum')->group(function () {
         ], 403);
     });
 
+    // Change password endpoint
+    Route::post('/change-password', [ApiController::class, 'changePassword']);
+    Route::post('/change-username', [ApiController::class, 'changeUsername']);
+
     // Routes that require email verification
     Route::middleware('verified')->group(function () {
         Route::get('/items', [ApiController::class, 'getItems']);
@@ -135,6 +139,7 @@ Route::prefix('/characteristics')->as('characteristics.')->middleware(['auth:san
     Route::get('/categories', [$controller, 'getCategories']);
     Route::get('/locations', [$controller, 'getLocations']);
     Route::get('/colours', [$controller, 'getColours']);
+    Route::get('/faculties', [$controller, 'getFaculties']);
     Route::get('/categories/{id}', [$controller, 'getCategoryById']);
     Route::get('/locations/{id}', [$controller, 'getLocationById']);
     Route::get('/colours/{id}', [$controller, 'getColourById']);

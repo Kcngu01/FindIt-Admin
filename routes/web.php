@@ -7,6 +7,7 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\ColourController;
 use App\Http\Controllers\LocationController;
 use App\Http\Controllers\API\PasswordResetController;
+use App\Http\Controllers\Auth\AdminPasswordResetController;
 use App\Http\Controllers\ClaimReviewController;
 use App\Http\Controllers\ClaimHistoryController;
 use App\Http\Controllers\DashboardController;
@@ -20,6 +21,18 @@ Route::middleware('guest')->group(function(){
     Route::get('/',function(){return redirect()->route('login');});
     Route::get('/login', [LoginController::class, 'showLoginForm'])->name('login');
     Route::post('/login', [LoginController::class, 'login']);
+    
+    // Admin password reset routes
+    Route::get('/admin/forgot-password', [AdminPasswordResetController::class, 'showForgotForm'])
+        ->name('admin.password.request');
+    Route::post('/admin/forgot-password', [AdminPasswordResetController::class, 'sendResetLinkEmail'])
+        ->name('admin.password.email');
+    Route::get('/admin/reset-password/{id}/{hash}', [AdminPasswordResetController::class, 'showResetForm'])
+        ->name('admin.password.reset');
+    Route::post('/admin/reset-password', [AdminPasswordResetController::class, 'resetPassword'])
+        ->name('admin.password.update');
+    Route::get('/admin/reset-success', [AdminPasswordResetController::class, 'showResetSuccessPage'])
+        ->name('admin.password.reset.success');
 });
 
 Route::post('/logout',[LoginController::class,'logout'])->name('logout');
@@ -29,6 +42,8 @@ Route::get('/reset-password/{id}/{hash}', [PasswordResetController::class, 'show
     ->name('password.reset');
 Route::post('/reset-password', [PasswordResetController::class, 'resetPassword'])
     ->name('password.update');
+Route::get('/reset-success', [PasswordResetController::class, 'showResetSuccessPage'])
+    ->name('password.reset.success');
 
 // Add password request routes
 Route::get('/forgot-password', [PasswordResetController::class, 'showForgotForm'])
@@ -65,6 +80,14 @@ Route::prefix('/location')->as('location.')->middleware('auth')->group(function(
     Route::delete('/delete/{id}',[$controller,'destroy'])->name('destroy');
 });
 
+Route::prefix('/faculty')->as('faculty.')->middleware('auth')->group(function(){
+    $controller = FacultyController::class;
+    Route::get('/index',[$controller,'index'])->name('index');
+    Route::post('/store',[$controller,'store'])->name('store');
+    Route::post('/update/{id}',[$controller,'update'])->name('update');
+    Route::delete('/delete/{id}',[$controller,'destroy'])->name('destroy');
+});
+
 Route::prefix('/claim')->as('claim.')->middleware('auth')->group(function(){
     $controller = ClaimReviewController::class;
     Route::get('/index',[$controller,'index'] )->name('index');
@@ -78,4 +101,5 @@ Route::prefix('/claim-history')->as('claim-history.')->middleware('auth')->group
     $controller = ClaimHistoryController::class;
     Route::get('index',[$controller,'index'])->name('index');
     Route::get('view/{id}',[$controller,'view'])->name('view');
+    Route::post('mark-as-claimed/{id}',[$controller,'markAsClaimed'])->name('mark-as-claimed');
 });

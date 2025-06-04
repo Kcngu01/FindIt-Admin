@@ -13,6 +13,7 @@ use Illuminate\Support\Str;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
 
 class PasswordResetController extends Controller
 {
@@ -34,6 +35,7 @@ class PasswordResetController extends Controller
         }
         
         $email = $request->query('email');
+        $token = $request->query('token');
         
         // Find the student by ID
         $student = Student::find($id);
@@ -51,11 +53,29 @@ class PasswordResetController extends Controller
             ]);
         }
         
+        // Verify token exists and is valid
+        $tokenRecord = DB::table('password_reset_tokens')
+            ->where('email', $student->email)
+            ->first();
+            
+        if (!$tokenRecord || $tokenRecord->token !== $token) {
+            return view('auth.reset-error', [
+                'error' => 'Invalid or already used password reset link.'
+            ]);
+        }
+        
+        // Check if token is expired (optional additional check)
+        if (Carbon::parse($tokenRecord->created_at)->addMinutes(Config::get('auth.verification.expire', 60))->isPast()) {
+            return view('auth.reset-error', [
+                'error' => 'Password reset link has expired.'
+            ]);
+        }
         
         return view('auth.reset-password', [
             'id' => $id,
             'hash' => $hash,
-            'email' => $email ?? $student->email
+            'email' => $email ?? $student->email,
+            'token' => $token
         ]);
     }
     
@@ -94,13 +114,26 @@ class PasswordResetController extends Controller
             ]);
         }
 
-        // Create reset URL
+        // Generate a unique token for this reset request
+        $token = Str::random(64);
+        
+        // Store the token in the password_reset_tokens table
+        DB::table('password_reset_tokens')->updateOrInsert(
+            ['email' => $student->email],
+            [
+                'token' => $token,
+                'created_at' => Carbon::now()
+            ]
+        );
+
+        // Create reset URL with the token
         $resetUrl = URL::temporarySignedRoute(
             'password.reset',
             Carbon::now()->addMinutes(Config::get('auth.verification.expire', 60)),
             [
                 'id' => $student->getKey(),
                 'hash' => sha1($student->getEmailForVerification()),
+                'token' => $token,
             ],
         );
 
@@ -117,7 +150,7 @@ class PasswordResetController extends Controller
             
             return back()->with('status', 'Password reset link sent to your email. Please check your inbox.');
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Failed to send password reset email: ' . $e->getMessage());
+            Log::error('Failed to send password reset email: ' . $e->getMessage());
             
             if ($request->expectsJson()) {
                 return response()->json([
@@ -144,39 +177,92 @@ class PasswordResetController extends Controller
             'id' => 'required',
             'hash' => 'required',
             'email' => 'required|email',
-            'password' => 'required|min:8|confirmed',
+            'token' => 'required',
+            'password' => [
+                'required',
+                'string',
+                'min:8',
+                'confirmed',
+                'regex:/[A-Z]/', // at least one uppercase letter
+                'regex:/[a-z]/', // at least one lowercase letter
+                'regex:/[0-9]/', // at least one number
+                'regex:/[^a-zA-Z0-9]/' // at least one special character
+            ],
         ]);
 
         try {
-            // Find the student by email
-            $student = Student::where('email', $request->email)->first();
+            // Find the student by ID
+            $student = Student::find($request->id);
             
             if (!$student) {
+                Log::warning('Student not found for password reset: ID ' . $request->id);
                 return back()->withInput()->withErrors([
                     'email' => 'User not found'
                 ]);
             }
+            
+            // Verify the email matches the student's email
+            if ($student->email !== $request->email) {
+                Log::warning('Email mismatch in password reset attempt for student ID: ' . $request->id);
+                return redirect('/')->with('error', 'Invalid reset link');
+            }
 
             // Verify the hash matches
             if ($request->hash !== sha1($student->getEmailForVerification())) {
+                Log::warning('Invalid hash in password reset attempt for student ID: ' . $request->id);
                 return redirect('/')->with('error', 'Invalid reset link');
+            }
+            
+            // Verify token exists and is valid
+            $tokenRecord = DB::table('password_reset_tokens')
+                ->where('email', $student->email)
+                ->first();
+                
+            if (!$tokenRecord || $tokenRecord->token !== $request->token) {
+                Log::warning('Invalid or already used token in password reset attempt for student ID: ' . $request->id);
+                return back()->withInput()->withErrors([
+                    'email' => 'This password reset link has already been used or is invalid.'
+                ]);
             }
 
             // Update password
             $student->password = Hash::make($request->password);
             $student->save();
+            
+            // Delete the token to invalidate the reset link
+            DB::table('password_reset_tokens')
+                ->where('email', $student->email)
+                ->delete();
 
+            // Log successful password change
+            Log::info('Student password reset successful for ID: ' . $student->id . ' (' . $student->email . ')');
+            
             // Fire password reset event
             event(new PasswordReset($student));
 
-            // Return with success message to display success section
-            return back()->with('success', true)->with('status', 'Password has been reset successfully');
+            // Redirect to success page
+            return redirect()->route('password.reset.success')
+                ->with('reset_email', $student->email);
             
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Password reset failed: ' . $e->getMessage());
+            Log::error('Password reset failed: ' . $e->getMessage());
             return back()->withInput()->withErrors([
                 'email' => 'Failed to reset password: ' . $e->getMessage()
             ]);
         }
+    }
+    
+    /**
+     * Show the password reset success page.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\View\View
+     */
+    public function showResetSuccessPage(Request $request)
+    {
+        $email = $request->session()->get('reset_email', 'your account');
+        return view('auth.reset-password-success', [
+            'email' => $email
+        ]);
     }
 } 

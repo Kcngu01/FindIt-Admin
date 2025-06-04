@@ -1,5 +1,7 @@
 @extends('layouts.app')
 
+@section('title', 'Students')
+
 @section('content')
     <h1 class="mb-4">Students</h1>
     <div class="card">
@@ -17,7 +19,7 @@
             <table id="studentTable" class="table">
                 <thead>
                     <tr>
-                        <th>Action</th>
+                        <!-- <th>Action</th> -->
                         <th>ID</th>
                         <th>Username</th>
                         <th>Matric No.</th>
@@ -28,11 +30,11 @@
                 <tbody>
                     @forelse($students as $student)
                     <tr>
-                        <form method="POST" action="{{ route('students.destroy', $student->id) }}" onsubmit="return confirm('Are you sure you want to delete this user?');">
+                        <!-- <form method="POST" action="{{ route('students.destroy', $student->id) }}" onsubmit="return confirm('Are you sure you want to delete this user?');">
                             @csrf
                             @method('DELETE')
                             <td><button type="submit" class="btn btn-outline-danger" data-id="{{$student->id}}">Delete</button></td>  
-                        </form>
+                        </form> -->
                         <td>{{$student->id}}</td>
                         <td>{{$student->name}}</td>
                         <td>{{$student->matric_no}}</td>

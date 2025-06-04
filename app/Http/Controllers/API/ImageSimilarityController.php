@@ -16,6 +16,7 @@ class ImageSimilarityController extends Controller
 {
     // URL to your FastAPI service - would typically be in .env
     private $fastApiUrl = "https://Kcngu01-FindIt-api.hf.space"; // Update with actual Colab URL
+    // private $fastApiUrl = "https://huggingface.co/spaces/Kcngu01/FindIt-api";
     private $hfToken; // Will be loaded from .env
 
     
@@ -75,7 +76,15 @@ class ImageSimilarityController extends Controller
             // If no related items, just get the patch embedding
             if ($relatedItems->isEmpty()) {
                 Log::info('No related items found for comparison');
-                $embedding = $this->getImageEmbedding($file);
+                
+                try {
+                    $embedding = $this->getImageEmbedding($file);
+                } catch (\Exception $e) {
+                    Log::warning('Failed to get image embedding, proceeding without it', [
+                        'error' => $e->getMessage()
+                    ]);
+                    $embedding = null;
+                }
                 
                 // If this is a lost item, send a "no matches" notification
                 if ($item->type === 'lost') {
@@ -101,19 +110,41 @@ class ImageSimilarityController extends Controller
                 ];
             })->toArray();
             
-            // Make request to FastAPI service with patch embeddings support
-            $imageBase64 = $this->encodeImage($file);
-            $matches = $this->compareSimilarity($imageBase64, $storedEmbeddings);
-            
-            // Create match records and send notifications if needed
-            if (isset($matches['matches']) && !empty($matches['matches'])) {
-                $this->createMatches($item, $matches['matches']);
-            } else if ($item->type === 'lost') {
-                // If this is a lost item and no matches, send notification
-                $this->notificationService->sendNoMatchesNotification($item);
+            try {
+                // Make request to FastAPI service with patch embeddings support
+                $imageBase64 = $this->encodeImage($file);
+                $matches = $this->compareSimilarity($imageBase64, $storedEmbeddings);
+                
+                // Create match records and send notifications if needed
+                if (isset($matches['matches']) && !empty($matches['matches'])) {
+                    $this->createMatches($item, $matches['matches']);
+                } else if ($item->type === 'lost') {
+                    // If this is a lost item and no matches, send notification
+                    $this->notificationService->sendNoMatchesNotification($item);
+                }
+                
+                return $matches;
+            } catch (\Exception $e) {
+                Log::warning('Failed to compare image similarity, falling back to basic matching', [
+                    'error' => $e->getMessage()
+                ]);
+                
+                // Fallback: Use basic category, color and location matching without image similarity
+                $fallbackMatches = [
+                    'success' => true,
+                    'message' => 'Using basic matching without image similarity due to service unavailability',
+                    'embedding' => null,
+                    'matches' => []
+                ];
+                
+                // If this is a lost item, send a "no matches from image" notification
+                if ($item->type === 'lost') {
+                    $this->notificationService->sendNoMatchesNotification($item);
+                    Log::info('No-match notification sent due to service unavailability', ['item_id' => $item->id]);
+                }
+                
+                return $fallbackMatches;
             }
-            
-            return $matches;
             
         } catch (\Exception $e) {
             Log::error('Error processing image similarity', [
@@ -192,13 +223,27 @@ class ImageSimilarityController extends Controller
             // Convert image to base64
             $imageBase64 = $this->encodeImage($file);
             
-            // Make request to FastAPI service
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $this->hfToken,
-                'Content-Type' => 'application/json',
-            ])->post($this->fastApiUrl . '/compute_embedding', [
-                'image' => $imageBase64
-            ]);
+            // Make request to FastAPI service with increased timeout and retry logic
+            // This code makes an HTTP request to the FastAPI service with these configurations:
+            // 1. Sets a timeout of 120 seconds (2 minutes) - allowing more time for the ML model to process
+            // 2. Implements a retry mechanism that:
+            //    - Will attempt the request up to 3 times
+            //    - Waits 5000ms (5 seconds) between retry attempts
+            //    - Only retries when either:
+            //      a) A connection error occurs (service unreachable)
+            //      b) The service returns a 5xx server error response
+            $response = Http::timeout(120) // Increase timeout to 120 seconds (2 minutes)
+                ->retry(3, 5000, function ($exception, $request) {
+                    // Retry on connection errors or server errors (5xx responses)
+                    return $exception instanceof \Illuminate\Http\Client\ConnectionException || 
+                           (optional($exception->response)->status() >= 500);
+                })
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $this->hfToken,
+                    'Content-Type' => 'application/json',
+                ])->post($this->fastApiUrl . '/compute_embedding', [
+                    'image' => $imageBase64
+                ]);
             
             // Check for successful response
             if ($response->successful()) {
@@ -233,15 +278,21 @@ class ImageSimilarityController extends Controller
     private function compareSimilarity($imageBase64, $storedEmbeddings, $threshold = 0.5)
     {
         try {
-            // Make request to FastAPI service
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $this->hfToken,
-                'Content-Type' => 'application/json',
-            ])->post($this->fastApiUrl . '/compare_similarity', [
-                'new_image' => $imageBase64,
-                'stored_embeddings' => $storedEmbeddings,
-                'threshold' => $threshold
-            ]);
+            // Make request to FastAPI service with increased timeout and retry logic
+            $response = Http::timeout(120) // Increase timeout to 120 seconds (2 minutes)
+                ->retry(3, 5000, function ($exception, $request) {
+                    // Retry on connection errors or server errors (5xx responses)
+                    return $exception instanceof \Illuminate\Http\Client\ConnectionException || 
+                           (optional($exception->response)->status() >= 500);
+                })
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $this->hfToken,
+                    'Content-Type' => 'application/json',
+                ])->post($this->fastApiUrl . '/compare_similarity', [
+                    'new_image' => $imageBase64,
+                    'stored_embeddings' => $storedEmbeddings,
+                    'threshold' => $threshold
+                ]);
             
             // Check for successful response
             if ($response->successful()) {

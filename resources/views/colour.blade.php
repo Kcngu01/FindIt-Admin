@@ -1,5 +1,7 @@
 @extends('layouts.app')
 
+@section('title', 'Colour')
+
 @section('content')
     <div class="container">
         <h1>Colour</h1>

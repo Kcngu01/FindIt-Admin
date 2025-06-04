@@ -1,5 +1,6 @@
 @extends('layouts.app')
 
+@section('title', 'Claim Review')
 @section('content')
 <div class="container">
     <h2 class="mb-4">Claim Review</h2>
@@ -31,6 +32,7 @@
                             <p class="mb-2"><span class="fw-bold">Category: </span><span id="foundItemCategory">{{$foundItem->category->name}}</span></p>
                             <p class="mb-2"><span class="fw-bold">Colour: </span><span id="foundItemColor">{{$foundItem->color->name}}</span></p>
                             <p class="mb-2"><span class="fw-bold">Location: </span><span id="foundItemLocation">{{$foundItem->location->name}}</span></p>
+                            <p class="mb-2"><span class="fw-bold">Faculty (Claim Location): </span><span id="foundItemClaimLocation">{{$foundItem->claimLocation->name ?? '-'}}</span></p>
                             <p class="mb-2"><span class="fw-bold">Date Found: </span><span id="foundItemDate">{{$foundItem->created_at->format('d/m/Y')}}</span></p>
                         </div>
                     </div>
@@ -145,11 +147,9 @@
         <div class="card-body">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h5 class="card-title">Claims Request List</h5>
-                
-            </div>
-            
-            <div class="mb-3 search-bar d-flex justify-content-end">
-                <input type="text" class="form-control" id="searchLostItem" placeholder="ID/Name/Matric no." style="max-width: 250px;">
+                <div>
+                    <input type="text" class="form-control" id="searchLostItem" placeholder="ID/Name/Matric no./Faculty">
+                </div>
             </div>
 
             <div class="table-responsive">

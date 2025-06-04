@@ -19,6 +19,7 @@ class Item extends Model
         'color_id',
         'location_id',
         'student_id',
+        'claim_location_id',
     ];
 
     protected $casts =[
@@ -45,6 +46,11 @@ class Item extends Model
     public function student(): BelongsTo
     {
         return $this->belongsTo(Student::class);
+    }
+
+    public function claimLocation(): BelongsTo
+    {
+        return $this->belongsTo(Faculty::class, 'claim_location_id');
     }
 
     // In app/Models/Item.php

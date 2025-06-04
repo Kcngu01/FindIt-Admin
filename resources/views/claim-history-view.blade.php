@@ -1,5 +1,6 @@
 @extends('layouts.app')
 
+@section('title', 'Claim History Details')
 @section('content')
 <div class="container">
     <div class="row mb-4">
@@ -12,10 +13,18 @@
                     </a>
                 </div>
             </div>
-            <div class="alert alert-{{ $claim->status === 'approved' ? 'success' : 'danger' }} mt-2">
-                This claim was <strong>{{ $claim->status === 'approved' ? 'APPROVED' : 'REJECTED' }}</strong> 
-                on {{ $claim->updated_at->format('d/m/Y H:i') }} 
-                by {{ $claim->admin->name ?? 'Unknown Admin' }}
+            <div class="alert alert-{{ 
+                $claim->status === 'approved' ? 'success' : 
+                ($claim->status === 'claimed' ? 'primary' : 'danger') 
+            }} mt-2">
+                @if($claim->status === 'claimed')
+                    This claim was <strong>CLAIMED</strong> by the student
+                    on {{ $claim->updated_at->format('d/m/Y H:i') }}
+                @else
+                    This claim was <strong>{{ $claim->status === 'approved' ? 'APPROVED' : 'REJECTED' }}</strong> 
+                    on {{ $claim->updated_at->format('d/m/Y H:i') }} 
+                    by {{ $claim->admin->name ?? 'Unknown Admin' }}
+                @endif
             </div>
         </div>
     </div>
@@ -63,6 +72,9 @@
                         </div>
                         <div class="detail-row mb-2">
                             <strong>Found Location:</strong> <span>{{ $claim->foundItem->location->name ?? '-' }}</span>
+                        </div>
+                        <div class="detail-row mb-2">
+                            <strong>Faculty (Claim Location):</strong> <span>{{ $claim->foundItem->claimLocation->name ?? '-' }}</span>
                         </div>
                         <div class="detail-row mb-2">
                             <strong>Date Found:</strong> <span>{{ $claim->foundItem->created_at ? $claim->foundItem->created_at->format('d/m/Y') : '-' }}</span>
@@ -163,9 +175,15 @@
                         <div class="col-md-6">
                             <p><strong>Claim ID:</strong> {{ $claim->id }}</p>
                             <p><strong>Status:</strong> 
-                                <span class="badge bg-{{ $claim->status === 'approved' ? 'success' : 'danger' }}">
+                                <span class="badge bg-{{ 
+                                    $claim->status === 'approved' ? 'success' : 
+                                    ($claim->status === 'claimed' ? 'primary' : 'danger') 
+                                }}">
                                     {{ ucfirst($claim->status) }}
                                 </span>
+                                @if($claim->status === 'claimed')
+                                <small class="text-muted">(Item collected by student)</small>
+                                @endif
                             </p>
                             <p><strong>Student:</strong> {{ $claim->student->name ?? '-' }} (Matric no.: {{ $claim->student->matric_no ?? '-' }})</p>
                         </div>

@@ -122,11 +122,12 @@
                 <input type="hidden" id="id" name="id" value="{{ $id }}">
                 <input type="hidden" id="hash" name="hash" value="{{ $hash }}">
                 <input type="hidden" id="email" name="email" value="{{ $email }}">
+                <input type="hidden" id="token" name="token" value="{{ $token }}">
 
                 <div class="form-group">
                     <label for="password" class="form-label">New Password</label>
                     <div class="input-group">
-                        <input type="password" id="password" name="password" autocomplete="off" class="form-control" required minlength="8">
+                        <input id="password" type="password" class="form-control @error('password') is-invalid @enderror" name="password" required autocomplete="off" minlength="8">
                         <div class="input-group-append">
                             <button type="button" class="btn btn-outline-secondary" id="togglePassword">
                                 <i class="bi bi-eye"></i>
@@ -134,7 +135,7 @@
                         </div>
                     </div>
                     <div id="password-error" class="invalid-feedback"></div>
-                    <div class="form-text">Password must be at least 8 characters long</div>
+                    <div class="form-text">Password must contain at least 8 characters, including uppercase, lowercase, number, and special character.</div>
                 </div>
 
                 <div class="form-group">
@@ -196,7 +197,10 @@
 
         // Real-time password validation
         document.getElementById('password_confirmation').addEventListener('input', checkPasswordMatch);
-        document.getElementById('password').addEventListener('input', checkPasswordMatch);
+        document.getElementById('password').addEventListener('input', function() {
+            checkPasswordMatch();
+            checkPasswordStrength(this.value);
+        });
 
         function checkPasswordMatch() {
             const password = document.getElementById('password').value;
@@ -209,15 +213,41 @@
                 mismatchElement.style.display = 'none';
             }
         }
+        
+        // Check password strength
+        function checkPasswordStrength(password) {
+            const hasUpperCase = /[A-Z]/.test(password);
+            const hasLowerCase = /[a-z]/.test(password);
+            const hasNumber = /[0-9]/.test(password);
+            const hasSpecialChar = /[^a-zA-Z0-9]/.test(password);
+            const isLongEnough = password.length >= 8;
+            
+            const passwordInput = document.getElementById('password');
+            
+            if (!isLongEnough || !hasUpperCase || !hasLowerCase || !hasNumber || !hasSpecialChar) {
+                passwordInput.setCustomValidity('Password must be at least 8 characters long and include uppercase, lowercase, number, and special character.');
+            } else {
+                passwordInput.setCustomValidity('');
+            }
+            
+            return isLongEnough && hasUpperCase && hasLowerCase && hasNumber && hasSpecialChar;
+        }
 
         function validateForm() {
             const password = document.getElementById('password').value;
             const confirmPassword = document.getElementById('password_confirmation').value;
+            const isStrong = checkPasswordStrength(password);
             
             if (password !== confirmPassword) {
                 document.getElementById('password-mismatch').style.display = 'block';
                 return false;
             }
+            
+            if (!isStrong) {
+                alert('Password must be at least 8 characters long and include uppercase, lowercase, number, and special character.');
+                return false;
+            }
+            
             return true;
         }
     </script>

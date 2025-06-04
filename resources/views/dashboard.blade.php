@@ -1,18 +1,14 @@
 @extends('layouts.app')
 
+@section('title', 'Dashboard')
 @section('content')
 <h1 class="mb-4">Dashboard</h1>
     
     <h2 class="mb-3">Overview</h2>
     
-    <div class="row g-4">
-        <!-- Data container (hidden) -->
-        <div id="dashboard-data" 
-             data-dashboard="{{ json_encode($dashboardData ?? []) }}"
-             style="display: none;"></div>
-             
-        <!-- Registered Students Card -->
-        <div class="col-md-6 col-lg-3">
+    <!-- Registered Students Card (Moved above filter) -->
+    <div class="row mb-4">
+        <div class="col-md-4">
             <div class="card">
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">Registered Students</h6>
@@ -22,12 +18,40 @@
                 </div>
             </div>
         </div>
+    </div>
+    
+    <!-- Faculty Filter Dropdown -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <label for="faculty_id" class="form-label">Filter by Faculty:</label>
+            <select class="form-select" id="faculty_id" name="faculty_id" aria-label="Filter by Faculty">
+                <option value="">All Faculties</option>
+                @foreach($faculties as $faculty)
+                    <option value="{{ $faculty->id }}" {{ request('faculty_id') == $faculty->id ? 'selected' : '' }}>
+                        {{ $faculty->name }}
+                    </option>
+                @endforeach
+            </select>
+        </div>
+    </div>
+    
+    <!-- Charts that can be filtered by faculty -->
+    <div class="row g-4 mb-5">
+        <!-- Data container (hidden) -->
+        <div id="dashboard-data" 
+             data-dashboard="{{ json_encode($dashboardData ?? []) }}"
+             style="display: none;"></div>
 
         <!-- Pending Claims Card -->
-        <div class="col-md-6 col-lg-3">
+        <div class="col-md-4">
             <div class="card">
                 <div class="card-body">
-                    <h6 class="card-subtitle mb-2 text-muted">Pending Claims</h6>
+                    <h6 class="card-subtitle mb-2 text-muted">
+                        Pending Claims
+                        @if(request('faculty_id'))
+                            <span class="badge bg-info">Filtered</span>
+                        @endif
+                    </h6>
                     <div style="height: 180px; position: relative;">
                         <canvas id="pendingClaimsChart"></canvas>
                     </div>
@@ -36,10 +60,15 @@
         </div>
 
         <!-- Claimed Card -->
-        <div class="col-md-6 col-lg-3">
+        <div class="col-md-4">
             <div class="card">
                 <div class="card-body">
-                    <h6 class="card-subtitle mb-2 text-muted">Claimed</h6>
+                    <h6 class="card-subtitle mb-2 text-muted">
+                        Claimed
+                        @if(request('faculty_id'))
+                            <span class="badge bg-info">Filtered</span>
+                        @endif
+                    </h6>
                     <div style="height: 180px; position: relative;">
                         <canvas id="claimedChart"></canvas>
                     </div>
@@ -48,11 +77,14 @@
         </div>
 
         <!-- Recovery Rate Card -->
-        <div class="col-md-6 col-lg-3">
+        <div class="col-md-4">
             <div class="card">
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">
                         Recovery Rate
+                        @if(request('faculty_id'))
+                            <span class="badge bg-info">Filtered</span>
+                        @endif
                         <i class="bi bi-info-circle-fill text-muted ms-1" 
                            data-bs-toggle="tooltip" 
                            data-bs-placement="top" 
@@ -70,6 +102,9 @@
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+    // Store the registered students chart instance to prevent re-animation
+    let registeredStudentsChart = null;
+    
     document.addEventListener('DOMContentLoaded', function() {
         // Initialize all tooltips
         var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
@@ -111,55 +146,64 @@
         };
         
         // Registered Students Chart (Doughnut Chart)
-        new Chart(document.getElementById('registeredStudentsChart'), {
-            type: 'doughnut',
-            data: {
-                labels: ['Registered'],
-                datasets: [{
-                    data: [registeredStudents, 0],
-                    backgroundColor: ['#4e73df', '#f8f9fc'],
-                    hoverBackgroundColor: ['#2e59d9', '#f8f9fc'],
-                    hoverBorderColor: "rgba(234, 236, 244, 1)",
-                }]
-            },
-            options: {
-                ...commonOptions,
-                plugins: {
-                    legend: {
-                        display: false
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                return integerFormatter(registeredStudents);
+        // Only create if it doesn't exist yet
+        if (!registeredStudentsChart) {
+            registeredStudentsChart = new Chart(document.getElementById('registeredStudentsChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Registered'],
+                    datasets: [{
+                        data: [registeredStudents, 0],
+                        backgroundColor: ['#4e73df', '#f8f9fc'],
+                        hoverBackgroundColor: ['#2e59d9', '#f8f9fc'],
+                        hoverBorderColor: "rgba(234, 236, 244, 1)",
+                    }]
+                },
+                options: {
+                    ...commonOptions,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return integerFormatter(registeredStudents);
+                                }
                             }
                         }
+                    },
+                    cutout: '70%',
+                    animation: {
+                        duration: sessionStorage.getItem('dashboardLoaded') ? 0 : 1000
                     }
                 },
-                cutout: '70%'
-            },
-            plugins: [{
-                id: 'centerText',
-                afterDraw: function(chart) {
-                    const width = chart.width;
-                    const height = chart.height;
-                    const ctx = chart.ctx;
+                plugins: [{
+                    id: 'centerText',
+                    afterDraw: function(chart) {
+                        const width = chart.width;
+                        const height = chart.height;
+                        const ctx = chart.ctx;
 
-                    ctx.restore();
-                    const fontSize = (height / 114).toFixed(2);
-                    ctx.font = fontSize + 'em sans-serif';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillStyle = '#000';
+                        ctx.restore();
+                        const fontSize = (height / 114).toFixed(2);
+                        ctx.font = fontSize + 'em sans-serif';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillStyle = '#000';
 
-                    const text = registeredStudents.toString();
-                    const textX = Math.round((width - ctx.measureText(text).width) / 2);
-                    const textY = height / 2;
+                        const text = registeredStudents.toString();
+                        const textX = Math.round((width - ctx.measureText(text).width) / 2);
+                        const textY = height / 2;
 
-                    ctx.fillText(text, textX, textY);
-                    ctx.save();
-                }
-            }]
-        });
+                        ctx.fillText(text, textX, textY);
+                        ctx.save();
+                    }
+                }]
+            });
+            
+            // Mark that dashboard has been loaded once
+            sessionStorage.setItem('dashboardLoaded', 'true');
+        }
 
         // Pending Claims Chart (Radial Gauge Chart) - better than bar chart for single value
         new Chart(document.getElementById('pendingClaimsChart'), {
@@ -329,6 +373,11 @@
                     ctx.save();
                 }
             }]
+        });
+        
+        // Add event listener to faculty filter dropdown for automatic submission
+        document.getElementById('faculty_id').addEventListener('change', function() {
+            window.location.href = '{{ route('dashboard') }}' + (this.value ? '?faculty_id=' + this.value : '');
         });
     });
 </script>

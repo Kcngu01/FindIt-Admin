@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>登入</title>
+    <title>Login</title>
     <!-- <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"> -->
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <style>
@@ -100,11 +100,11 @@
                             <label for="email">Email address</label>
                             <input type="email" class="form-control @error('email') is-invalid @enderror" 
                                 id="email" name="email" value="{{ old('email') }}" required autofocus>
-                            @error('email')
+                            <!-- @error('email')
                                 <span class="invalid-feedback" role="alert">
                                     <strong>{{ $message }}</strong>
                                 </span>
-                            @enderror
+                            @enderror -->
                         </div>
                         
                         <div class="form-group">
@@ -117,12 +117,21 @@
                                         <i class="bi bi-eye"></i>
                                     </button>
                                 </div>
-                            </div>
-                            @error('password')
+                                @error('password')
                                 <span class="invalid-feedback" role="alert">
                                     <strong>{{ $message }}</strong>
                                 </span>
                             @enderror
+                            </div>
+                            
+                        </div>
+                        
+                        <div class="d-flex justify-content-end align-items-center mb-3">
+                            <div>
+                                <a href="{{ route('admin.password.request') }}" class="text-primary">
+                                    Forgot Password?
+                                </a>
+                            </div>
                         </div>
                         
                         <div class="text-center">

@@ -28,15 +28,18 @@ class ClaimReviewController extends Controller
             ->whereHas('claims', function($query) {
                 $query->where('status', 'pending');
             })
-            ->with(['category','color','location','student'])
+            ->with(['category','color','location','student','claimLocation'])
             ->withCount(['claims' => function($query) {
                 $query->where('status', 'pending');
             }])
             ->get();
         
+        // Get all faculties for filtering
+        $faculties = \App\Models\Faculty::all();
         
         return view('claim-index', [
-            'foundItems' => $foundItems, 
+            'foundItems' => $foundItems,
+            'faculties' => $faculties,
         ]);
     }
 
