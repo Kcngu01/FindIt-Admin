@@ -22,6 +22,7 @@
         <div class="card-body">
             <h5 class="card-title mb-5">Claim Approval List</h5>
             
+            @if( count($claims) > 0 )
             <div class="row mb-3">
                 <div class="col-md-5 mb-2">
                     <label for="facultyFilter" class="form-label">Filter by Faculty:</label>
@@ -52,7 +53,7 @@
                 </thead>
 
                 <tbody>
-                    @forelse($claims as $claim)
+                    @foreach($claims as $claim)
                     <tr>
                         <td>
                             <form method="GET" action="{{ route('claim-history.view', $claim->id) }}">
@@ -88,13 +89,12 @@
                             @endif
                         </td>
                     </tr>
-                    @empty
-                    <tr>
-                        <td colspan="7" class="text-center">No data found</td>
-                    </tr>
-                    @endforelse
+                    @endforeach
                 </tbody>
             </table>
+            @else
+            <div class="alert alert-info">No claim requests found</div>
+            @endif
         </div>
     </div>
     

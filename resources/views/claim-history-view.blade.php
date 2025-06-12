@@ -19,10 +19,10 @@
             }} mt-2">
                 @if($claim->status === 'claimed')
                     This claim was <strong>CLAIMED</strong> by the student
-                    on {{ $claim->updated_at->format('d/m/Y H:i') }}
+                    on {{ $claim->updated_at->setTimezone('Asia/Kuala_Lumpur')->format('d/m/Y H:i') }} (MYT)
                 @else
                     This claim was <strong>{{ $claim->status === 'approved' ? 'APPROVED' : 'REJECTED' }}</strong> 
-                    on {{ $claim->updated_at->format('d/m/Y H:i') }} 
+                    on {{ $claim->updated_at->setTimezone('Asia/Kuala_Lumpur')->format('d/m/Y H:i') }} (MYT)
                     by {{ $claim->admin->name ?? 'Unknown Admin' }}
                 @endif
             </div>
@@ -77,7 +77,7 @@
                             <strong>Faculty (Claim Location):</strong> <span>{{ $claim->foundItem->claimLocation->name ?? '-' }}</span>
                         </div>
                         <div class="detail-row mb-2">
-                            <strong>Date Found:</strong> <span>{{ $claim->foundItem->created_at ? $claim->foundItem->created_at->format('d/m/Y') : '-' }}</span>
+                            <strong>Date Found:</strong> <span>{{ $claim->foundItem->created_at ? $claim->foundItem->created_at->setTimezone('Asia/Kuala_Lumpur')->format('d/m/Y H:i') : '-' }} (MYT)</span>
                         </div>
                     </div>
                 </div>
@@ -89,8 +89,8 @@
             <div class="comparison-indicator">
                 <i class="fas fa-exchange-alt fa-2x mb-3"></i>
                 <div class="similarity-box p-2 text-center border rounded">
-                    <div><strong>Similarity</strong></div>
-                    <div class="fs-5">{{ $claim->match->similarity_score ?? 'N/A' }}</div>
+                    <div><strong>Similarity Score</strong></div>
+                    <div class="fs-5">{{ isset($claim->match->similarity_score) ? number_format($claim->match->similarity_score * 100, 2) . '%' : 'N/A' }}</div>
                 </div>
             </div>
         </div>
@@ -136,7 +136,7 @@
                             <strong>Lost Location:</strong> <span>{{ $claim->lostItem->location->name ?? '-' }}</span>
                         </div>
                         <div class="detail-row mb-2">
-                            <strong>Date Lost:</strong> <span>{{ $claim->lostItem->created_at ? $claim->lostItem->created_at->format('d/m/Y') : '-' }}</span>
+                            <strong>Date Lost:</strong> <span>{{ $claim->lostItem->created_at ? $claim->lostItem->created_at->setTimezone('Asia/Kuala_Lumpur')->format('d/m/Y H:i') : '-' }} (MYT)</span>
                         </div>
                     </div>
                 </div>
@@ -188,8 +188,8 @@
                             <p><strong>Student:</strong> {{ $claim->student->name ?? '-' }} (Matric no.: {{ $claim->student->matric_no ?? '-' }})</p>
                         </div>
                         <div class="col-md-6">
-                            <p><strong>Submitted On:</strong> {{ $claim->created_at->format('d/m/Y H:i') }}</p>
-                            <p><strong>Processed On:</strong> {{ $claim->updated_at->format('d/m/Y H:i') }}</p>
+                            <p><strong>Submitted On:</strong> {{ $claim->created_at->setTimezone('Asia/Kuala_Lumpur')->format('d/m/Y H:i') }} (MYT)</p>
+                            <p><strong>Processed On:</strong> {{ $claim->updated_at->setTimezone('Asia/Kuala_Lumpur')->format('d/m/Y H:i') }} (MYT)</p>
                             <p><strong>Processed By:</strong> {{ $claim->admin->name ?? 'Unknown Admin' }} (ID: {{ $claim->admin->id ?? 'N/A' }})</p>
                         </div>
                     </div>

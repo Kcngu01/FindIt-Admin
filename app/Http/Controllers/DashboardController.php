@@ -8,6 +8,7 @@ use App\Models\Claim;
 use App\Models\Faculty;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class DashboardController extends Controller
 {
@@ -90,6 +91,7 @@ class DashboardController extends Controller
         // Get data for the last 3 months
         for ($i = 2; $i >= 0; $i--) {
             // subtracts $i months from the current date.
+            // create a date object that is $i months before the current date. When $i = 2: Date from 2 months ago
             $date = Carbon::now()->subMonths($i);
             // Formats the date as a 3-letter month abbreviation.
             $month = $date->format('M');
@@ -99,7 +101,10 @@ class DashboardController extends Controller
             $monthLabels[] = $month;
             
             // Count approved claims for this month
-            $claimsQuery = Claim::where('status', 'approved')->orWhere('status', 'claimed')
+            $claimsQuery = Claim::where(function($query) {
+                    $query->where('status', 'approved')
+                          ->orWhere('status', 'claimed');
+                })
                 ->whereYear('updated_at', $year)
                 ->whereMonth('updated_at', $date->month);
             
@@ -113,6 +118,8 @@ class DashboardController extends Controller
             $claimsCount = $claimsQuery->count();
                 
             $monthlyData[] = $claimsCount;
+            Log::info($monthLabels);
+            Log::info($monthlyData);
         }
         
         return [

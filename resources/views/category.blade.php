@@ -79,7 +79,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                    @forelse($categories as $category)
+                    @foreach($categories as $category)
                         <tr>
                             <td style="width:20%; white-space: no-wrap;">
                                 <div class="d-inline-flex">
@@ -99,11 +99,7 @@
                             <td>{{$category->id}}</td>
                             <td>{{$category->name}}</td>
                         </tr>
-                    @empty
-                    <tr>
-                        <td colspan="3" class="text-center">No categories found</td>
-                    </tr>
-                    @endforelse
+                    @endforeach
                     </tbody>
                 </table>
                 @else

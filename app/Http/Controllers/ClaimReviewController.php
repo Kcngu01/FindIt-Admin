@@ -164,7 +164,7 @@ class ClaimReviewController extends Controller
             // If we have a lost item ID, restore all dismissed matches for this lost item
             // but only for found items that are still available (no approved claims)
             if($lostItemId) {
-                // Find all found items that were matched with this lost item
+                // Find all matches which involves found items that were matched with this lost item
                 // and currently have a dismissed status
                 $dismissedMatches = ItemMatch::where('lost_item_id', $lostItemId)
                                           ->where('status', 'dismissed')
@@ -172,12 +172,25 @@ class ClaimReviewController extends Controller
                 
                 // For each dismissed match, check if the found item is still unclaimed
                 foreach($dismissedMatches as $dismissedMatch) {
-                    $hasApprovedClaim = Claim::where('found_item_id', $dismissedMatch->found_item_id)
-                                          ->where('status', 'approved')
+                    // prevent student from claiming found item that has already been claimed
+                    $foundItemHasApprovedClaim = Claim::where('found_item_id', $dismissedMatch->found_item_id)
+                                          ->whereIn('status', ['approved','claimed'])
+                                          ->exists() 
+                                       && Item::where('id', $dismissedMatch->found_item_id)
+                                          ->where('status', 'resolved')
                                           ->exists();
                     
-                    // If found item has no approved claims, make this match available again
-                    if(!$hasApprovedClaim) {
+                    // Check if the lost item involved in any approved claim 
+                    // prevent students from claiming more than 1 found item for the same lost item
+                    $lostItemHasApprovedClaim = Claim::where('lost_item_id', $dismissedMatch->lost_item_id)
+                                         ->whereIn('status', ['approved', 'claimed'])
+                                         ->exists()
+                                        && Item::where('id', $dismissedMatch->lost_item_id)
+                                          ->where('status', 'resolved')
+                                          ->exists();
+                    
+                    // Only make dismissed match available again if in the dismissed match: the found item has no approved claims AND the lost item is not involved in any approved claim
+                    if(!$foundItemHasApprovedClaim && !$lostItemHasApprovedClaim) {
                         $dismissedMatch->status = 'available';
                         $dismissedMatch->save();
                     }
@@ -271,7 +284,17 @@ class ClaimReviewController extends Controller
             $claims = Claim::where('found_item_id', $claim->found_item_id)
                 ->where('id', '!=', $claim->id)
                 ->where('status', 'pending')
-                ->update(['status' => 'rejected']);
+                ->get();
+                
+            // Store the claims to be rejected so we can send notifications later
+            $rejectedClaims = [];
+            foreach ($claims as $rejectedClaim) {
+                $rejectedClaim->status = 'rejected';
+                $rejectedClaim->admin_id = Auth::id();
+                $rejectedClaim->admin_justification = 'Automatically rejected as another claim for this item was approved.';
+                $rejectedClaim->save();
+                $rejectedClaims[] = $rejectedClaim;
+            }
 
             //approved the match if claim request is based on match
             if($claim->match_id!=null){
@@ -280,18 +303,64 @@ class ClaimReviewController extends Controller
                 $match->save();
             }
                 
-            $matches = ItemMatch::where('found_item_id', $claim->found_item_id)
-            ->whereIn('status', ['pending', 'available'])
-            ->update([
-                'status' => DB::raw("CASE 
-                    WHEN status = 'pending' THEN 'rejected' 
-                    WHEN status = 'available' THEN 'dismissed' 
-                    END"
+            // First, get the matches that will be updated and collect their lost item IDs
+            $matchesToUpdate = ItemMatch::where('found_item_id', $claim->found_item_id)
+                ->whereIn('status', ['pending', 'available'])
+                ->get();
+                
+            // Extract lost item IDs from matches before updating them
+            $lostItemIds = $matchesToUpdate->pluck('lost_item_id')->filter()->unique()->toArray();
+            
+            // Now update the matches' status
+            ItemMatch::where('found_item_id', $claim->found_item_id)
+                ->whereIn('status', ['pending', 'available'])
+                ->update([
+                    'status' => DB::raw("CASE 
+                        WHEN status = 'pending' THEN 'rejected' 
+                        WHEN status = 'available' THEN 'dismissed' 
+                        END"
                     )
-            ]);
+                ]);
+            
+            // Check for matches with the collected lost item IDs that are now dismissed
+            if (!empty($lostItemIds)) {
+                // Find dismissed matches involving these lost items
+                $dismissedMatches = ItemMatch::where('status', 'dismissed')
+                    ->whereIn('lost_item_id', $lostItemIds)
+                    ->get();
+                    
+                foreach ($dismissedMatches as $match) {
+                    // Check if the found item is claimed
+                    $foundItemClaimed = Claim::where('found_item_id', $match->found_item_id)
+                        ->whereIn('status', ['approved', 'claimed'])
+                        ->exists()
+                        && Item::where('id', $match->found_item_id)
+                                          ->where('status', 'resolved')
+                                          ->exists();
+                    
+                    // Check if the lost item is claimed
+                    $lostItemClaimed = Claim::where('lost_item_id', $match->lost_item_id)
+                        ->whereIn('status', ['approved', 'claimed'])
+                        ->exists()
+                        && Item::where('id', $match->lost_item_id)
+                                          ->where('status', 'resolved')
+                                          ->exists();
+                    
+                    // If neither item is claimed, make the match available again
+                    if (!$foundItemClaimed && !$lostItemClaimed) {
+                        $match->status = 'available';
+                        $match->save();
+                    }
+                }
+            }
 
-            // Send notification to user
+            // Send notification to the approved claim user
             $this->sendClaimNotification($claim, 'approved');
+            
+            // Send notifications to all rejected claims
+            foreach ($rejectedClaims as $rejectedClaim) {
+                $this->sendClaimNotification($rejectedClaim, 'rejected');
+            }
 
             return response()->json([
                 'success' => true,
@@ -320,19 +389,11 @@ class ClaimReviewController extends Controller
                 Log::error('Cannot send notification: Student not found for claim #' . $claim->id);
                 return;
             }
-            // Get user FCM tokens
-            $tokens = FcmToken::where('student_id', $claim->student_id)
-                        ->pluck('device_token')
-                        ->toArray();
-            
-            if (empty($tokens)) {
-                Log::info("No FCM tokens found for user {$claim->student_id}");
-                return;
-            }
             
             // Prepare notification content
             $foundItem = $claim->foundItem;
             $itemName = $foundItem ? $foundItem->name : 'item';
+            
             if ($status === 'approved') {
                 $title = 'Claim Approved';
                 $body = "Your claim for the $itemName has been approved.";
@@ -350,10 +411,27 @@ class ClaimReviewController extends Controller
                 'admin_justification' => $claim->admin_justification ?? ''
             ];
             
-            // Send notification
-            $result = $this->firebaseService->sendMulticastNotification($tokens, $title, $body, $data);
+            // Get user FCM tokens
+            $tokens = FcmToken::where('student_id', $claim->student_id)
+                        ->pluck('device_token')
+                        ->toArray();
             
-            // Store notification in the database
+            // Only attempt to send push notification if tokens exist
+            if (!empty($tokens)) {
+                // Send notification
+                $result = $this->firebaseService->sendMulticastNotification($tokens, $title, $body, $data);
+                
+                Log::info("Claim notification sent for claim #{$claim->id}", [
+                    'action' => $status,
+                    'student_id' => $claim->student_id,
+                    'token_count' => count($tokens),
+                    'result' => $result
+                ]);
+            } else {
+                Log::info("No FCM tokens found for user {$claim->student_id}, notification stored in database only");
+            }
+            
+            // Always store notification in the database, regardless of FCM token availability
             \App\Models\StudentNotification::create([
                 'student_id' => $claim->student_id,
                 'title' => $title,
@@ -361,13 +439,6 @@ class ClaimReviewController extends Controller
                 'type' => 'claim_update',
                 'data' => $data,
                 'status' => 'unread'
-            ]);
-            
-            Log::info("Claim notification sent for claim #{$claim->id}", [
-                'action' => $status,
-                'student_id' => $claim->student_id,
-                'token_count' => count($tokens),
-                'result' => $result
             ]);
         } catch (\Exception $e) {
             Log::error('Failed to send claim notification: ' . $e->getMessage());

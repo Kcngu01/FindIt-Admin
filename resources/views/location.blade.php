@@ -78,7 +78,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                    @forelse($locations as $location)
+                    @foreach($locations as $location)
                         <tr>
                             <td style="width:20%; white-space: no-wrap;">
                                 <div class="d-inline-flex">
@@ -98,11 +98,7 @@
                             <td>{{$location->id}}</td>
                             <td>{{$location->name}}</td>
                         </tr>
-                    @empty
-                    <tr>
-                        <td colspan="3" class="text-center">No locations found</td>
-                    </tr>
-                    @endforelse
+                    @endforeach
                     </tbody>
                 </table>
                 @else

@@ -15,7 +15,7 @@
             
             <div class="row">
                 <!-- Found Item Column -->
-                <div class="col-md-6 border-end">
+                <div class="col-md-5">
                     <h6 class="text-center mb-3">Found Item</h6>
                     <div class="text-center mb-3">
                         @if($foundItem->image)
@@ -38,8 +38,19 @@
                     </div>
                 </div>
                 
+                <!-- Similarity Score in Center Column -->
+                <div class="col-md-2 d-flex flex-column justify-content-center align-items-center">
+                    <div class="comparison-indicator">
+                        <i class="fas fa-exchange-alt fa-2x mb-3"></i>
+                        <div class="similarity-box p-2 text-center border rounded">
+                            <div><strong>Similarity Score</strong></div>
+                            <div class="fs-5" id="similarityScore">-</div>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Lost Item Column -->
-                <div class="col-md-6">
+                <div class="col-md-5">
                     <h6 class="text-center mb-3">Lost Item</h6>
                     
                     <!-- Image section - will be replaced with text when needed -->
@@ -61,7 +72,6 @@
                             <p class="mb-2"><span class="fw-bold">Description: </span><span id="lostItemDescription">-</span></p>
                             <p class="mb-2"><span class="fw-bold">Category: </span><span id="lostItemCategory">-</span></p>
                             <p class="mb-2"><span class="fw-bold">Colour: </span><span id="lostItemColor">-</span></p>
-                            <p class="mb-2"><span class="fw-bold">Similarity Score: </span><span id="similarityScore">-</span></p>
                             <p class="mb-2"><span class="fw-bold">Location: </span><span id="lostItemLocation">-</span></p>
                             <p class="mb-2"><span class="fw-bold">Date Lost: </span><span id="lostItemDate">-</span></p>
                         </div>
@@ -152,6 +162,7 @@
                 </div>
             </div>
 
+            @if(count($claims) > 0)
             <div class="table-responsive">
                 <table id="lostItemTable" class="table">
                     <thead class="bg-light">
@@ -166,7 +177,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                    @forelse($claims as $claim)
+                    @foreach($claims as $claim)
                         <tr data-claim-id="{{ $claim->id }}">
                             <td>
                                 <button class="btn btn-secondary btn-sm compare-btn" data-claim-id="{{ $claim->id }}">Compare</button>
@@ -188,14 +199,13 @@
                             </td>
                             <td>{{$claim->student->matric_no}}</td>
                         </tr>
-                    @empty
-                    <tr>
-                        <td colspan="7" class="text-center">No claim request found</td>
-                    </tr>
-                    @endforelse
+                    @endforeach
                     </tbody>
                 </table>
             </div>
+            @else
+            <div class="alert alert-info">No claim requests found</div>
+            @endif
         </div>
     </div>
 </div>
@@ -248,6 +258,20 @@
     
     .item-image:hover, .table-item-image:hover {
         transform: scale(1.05);
+    }
+    
+    /* Similarity score and comparison indicator styling */
+    .comparison-indicator {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .similarity-box {
+        background-color: #f8f9fa;
+        min-width: 120px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
     
     /* Modal image container styles */
@@ -344,6 +368,10 @@
             margin-right: auto;
             margin-left: 0;
         }
+        
+        .comparison-indicator {
+            margin: 1.5rem 0;
+        }
     }
 </style>
 @endpush
@@ -432,7 +460,7 @@
                 
                 // Here you would implement the approve logic with the claim ID
                 console.log('Approving claim ID:', claimId);
-                alert('Approving claim ID: ' + claimId);
+                // alert('Approving claim ID: ' + claimId);
                 
                 // Make an AJAX call to the backend to accept the claim
                 fetch('{{ route("claim.accept") }}', {
@@ -470,7 +498,9 @@
                     if (data.success) {
                         // Show success message and reload the page
                         alert(data.message || 'Claim approved successfully!');
-                        window.location.reload();
+                        // window.location.reload();
+                        window.location.href = '{{ route("claim.index") }}';
+
                     } else {
                         // If we got a response but success is false
                         throw new Error(data.message || 'Server returned an error');
@@ -538,9 +568,20 @@
                     
                     // Check if the response indicates success
                     if (data.success) {
-                        // Show success message and reload the page
+                        // Show success message
                         alert(data.message || 'Claim rejected successfully!');
-                        window.location.reload();
+                        
+                        // Get the table and count the rows
+                        const table = document.getElementById('lostItemTable');
+                        
+                        // If table doesn't exist or this is the last row (only 1 row left before deletion)
+                        if (!table || table.querySelector('tbody').rows.length <= 1) {
+                            // If this was the last claim, redirect to claim index page
+                            window.location.href = '{{ route("claim.index") }}';
+                        } else {
+                            // Otherwise just reload the current page
+                            window.location.reload();
+                        }
                     } else {
                         // If we got a response but success is false
                         throw new Error(data.message || 'Server returned an error');
@@ -846,7 +887,16 @@
                     $('#lostItemColor').text(data.lost.color);
                     $('#lostItemLocation').text(data.lost.location);
                     $('#lostItemDate').text(data.lost.date);
-                    $('#similarityScore').text(data.lost.similarity_score);
+                    
+                    // Format and display similarity score as percentage
+                    const similarityScore = data.lost.similarity_score;
+                    if (similarityScore !== undefined && similarityScore !== null) {
+                        // Format as percentage with 2 decimal places
+                        const formattedScore = (parseFloat(similarityScore) * 100).toFixed(2) + '%';
+                        $('#similarityScore').text(formattedScore);
+                    } else {
+                        $('#similarityScore').text('N/A');
+                    }
                     
                     // Enable buttons since we have valid data
                     $('#approveButton, #rejectButton').prop('disabled', false);

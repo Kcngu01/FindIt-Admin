@@ -11,7 +11,7 @@
         <div class="col-md-4">
             <div class="card">
                 <div class="card-body">
-                    <h6 class="card-subtitle mb-2 text-muted">Registered Students</h6>
+                    <h6 class="card-subtitle mb-2 text-muted">Registered Students (All Faculty)</h6>
                     <div style="height: 180px; position: relative;">
                         <canvas id="registeredStudentsChart"></canvas>
                     </div>
@@ -38,6 +38,7 @@
     <!-- Charts that can be filtered by faculty -->
     <div class="row g-4 mb-5">
         <!-- Data container (hidden) -->
+        <!-- json_encode() function here converts the PHP $dashboardData array into a JSON string. This makes the data available to JavaScript on the client side via the HTML data attribute (data-dashboard). It's necessary because JavaScript can't directly read PHP variables - the data needs to be embedded in the HTML in a format JavaScript can parse. -->
         <div id="dashboard-data" 
              data-dashboard="{{ json_encode($dashboardData ?? []) }}"
              style="display: none;"></div>
@@ -48,9 +49,9 @@
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">
                         Pending Claims
-                        @if(request('faculty_id'))
+                        <!-- @if(request('faculty_id'))
                             <span class="badge bg-info">Filtered</span>
-                        @endif
+                        @endif -->
                     </h6>
                     <div style="height: 180px; position: relative;">
                         <canvas id="pendingClaimsChart"></canvas>
@@ -64,10 +65,10 @@
             <div class="card">
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">
-                        Claimed
-                        @if(request('faculty_id'))
+                        Approved Claims
+                        <!-- @if(request('faculty_id'))
                             <span class="badge bg-info">Filtered</span>
-                        @endif
+                        @endif -->
                     </h6>
                     <div style="height: 180px; position: relative;">
                         <canvas id="claimedChart"></canvas>
@@ -82,13 +83,13 @@
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">
                         Recovery Rate
-                        @if(request('faculty_id'))
+                        <!-- @if(request('faculty_id'))
                             <span class="badge bg-info">Filtered</span>
-                        @endif
+                        @endif -->
                         <i class="bi bi-info-circle-fill text-muted ms-1" 
                            data-bs-toggle="tooltip" 
                            data-bs-placement="top" 
-                           title="Recovery Rate = (Successful Claims ÷ Total Claims) × 100%"></i>
+                           title="Recovery Rate = (Approved Claims ÷ Total Claims) × 100%"></i>
                     </h6>
                     <div style="height: 180px; position: relative;">
                         <canvas id="recoveryRateChart"></canvas>
@@ -114,6 +115,7 @@
     
         // Get data from HTML data attribute
         const dashboardDataStr = document.getElementById('dashboard-data').dataset.dashboard;
+        // JSON.parse() converts the JSON string back into a JavaScript object that can be directly manipulated. The data-dashboard attribute contains a string representation of the data, but JavaScript needs an actual object to work with the properties (like accessing data.pendingClaims or data.recoveryRate). JSON.parse() performs this string-to-object conversion, making the data usable for the chart rendering code.
         const dashboardData = JSON.parse(dashboardDataStr || '{}');
         
         // Extract values and continue with the existing code
@@ -263,7 +265,7 @@
             data: {
                 labels: monthLabels,
                 datasets: [{
-                    label: 'Claimed',
+                    label: 'Approved',
                     data: monthlyClaimedData,
                     borderColor: '#1cc88a',
                     backgroundColor: 'rgba(28, 200, 138, 0.1)',
@@ -314,7 +316,7 @@
                     tooltip: {
                         callbacks: {
                             label: function(context) {
-                                return `Claimed: ${integerFormatter(context.parsed.y)}`;
+                                return `Approved: ${integerFormatter(context.parsed.y)}`;
                             }
                         }
                     }

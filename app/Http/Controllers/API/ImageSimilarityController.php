@@ -70,6 +70,7 @@ class ImageSimilarityController extends Controller
                                 ->where('location_id', $request->input('location_id'))
                                 ->where('color_id', $request->input('color_id'))
                                 ->where('type', '!=', $itemType) // Different type (lost vs found)
+                                ->where('status', 'active')
                                 ->whereNotNull('image_embeddings')
                                 ->get();
             

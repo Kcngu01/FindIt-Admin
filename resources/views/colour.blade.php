@@ -79,7 +79,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                    @forelse($colours as $colour)
+                    @foreach($colours as $colour)
                         <tr>
                             <td style="width:20%; white-space: no-wrap;">
                                 <div class="d-inline-flex">
@@ -99,11 +99,7 @@
                             <td>{{$colour->id}}</td>
                             <td>{{$colour->name}}</td>
                         </tr>
-                    @empty
-                    <tr>
-                        <td colspan="3" class="text-center">No colours found</td>
-                    </tr>
-                    @endforelse
+                    @endforeach
                     </tbody>
                 </table>
                 @else

@@ -7,6 +7,7 @@
     <div class="card">
         <div class="card-body">
             <h5 class="card-title">Student List</h5>
+            @if( count($students) > 0 )
             <div class="mb-3 search-bar d-inline-block float-end"> 
                 <div class="input-group">
                     <input type="text" id="searchStudent" class="form-control" placeholder="ID/Username/Email">
@@ -40,13 +41,12 @@
                         <td>{{$student->matric_no}}</td>
                         <td>{{$student->email}}</td>
                     </tr>
-                    @empty
-                    <tr>
-                        <td colspan="5" class="text-center">No data found</td>
-                    </tr>
-                    @endforelse
+                    @endforeach
                 </tbody>
             </table>
+            @else
+            <div class="alert alert-info">No students found</div>
+            @endif
         </div>
     </div>
 @endsection

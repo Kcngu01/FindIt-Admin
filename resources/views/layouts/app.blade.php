@@ -148,10 +148,10 @@
                     </div>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="{{ route('claim.index') }}">Claim Review</a>
+                    <a class="nav-link" href="{{ route('claim.index') }}" data-nav-group="claim">Claim Review</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="{{ route('claim-history.index') }}">Claim Approval History</a>
+                    <a class="nav-link" href="{{ route('claim-history.index') }}" data-nav-group="claim-history">Claim Approval History</a>
                 </li>   
             </ul>
         </div>
@@ -178,14 +178,52 @@
             // Get all nav links
             const navLinks = $('.nav-link');
             const currentUrl = window.location.href;
+            // extracts the path portion of the current URL. The window.location.pathname property returns only the path segment of the URL (everything after the domain name and before any query parameters).
+            const currentPath = window.location.pathname;
+
+            // Check for specific page groups
+            let currentNavGroup = '';
+            
+            // Define path patterns and their corresponding navigation groups
+            const navGroupPatterns = [
+                // as long as the path includes /claim-review or /claim, the "Claim Review" nav item is highlighted
+                { pattern: '/claim-review/', group: 'claim' },
+                { pattern: '/claim/', group: 'claim' },
+                // as long as the path includes /claim-history, the "Claim Approval History" nav item is highlighted
+                { pattern: '/claim-history/', group: 'claim-history' },
+                // Add more patterns as needed for other sections
+            ];
+            
+            // Determine current navigation group based on URL
+            for (const pattern of navGroupPatterns) {
+                // includes() which means it's checking if pattern.pattern is a substring of currentPath. So it's not requiring an exact match - it just needs currentPath to contain the string defined in pattern.pattern somewhere within it
+                if (currentPath.includes(pattern.pattern)) {
+                    currentNavGroup = pattern.group;
+                    break;
+                }
+            }
 
             // Highlight the active nav item and expand parent if necessary
             navLinks.each(function () {
-                if (this.href === currentUrl) {
-                    $(this).addClass('active');
+                const $link = $(this);
+                // When using jQuery's .data('nav-group') on an element that doesn't have a data-nav-group attribute, it will simply return undefined rather than throwing an error. The code then safely uses this undefined value in the conditional statement that follows.
+                const navGroup = $link.data('nav-group');
+                
+                // First check if we're in a specific nav group and this link belongs to that group
+                // When you're on /claim-review/{id} (after clicking "View"), the "Claim Review" nav item is highlighted by the data-nav-group matching
+                if (currentNavGroup && navGroup === currentNavGroup) {
+                    $link.addClass('active');
+                }
+                // Otherwise use the exact URL match
+                // When you're on /claim (the index page), the "Claim Review" nav item is highlighted by exact URL match
+                else if (this.href === currentUrl) {
+                    $link.addClass('active');
+                }
 
+                // If this link is active, expand its parent if needed
+                if ($link.hasClass('active')) {
                     // Check if the active link is inside a collapsible section
-                    const collapseElement = $(this).closest('.collapse');
+                    const collapseElement = $link.closest('.collapse');
                     if (collapseElement.length) {
                         const parentLink = collapseElement.prev('.nav-link'); // The parent nav-link
                         const arrow = parentLink.find('.arrow');

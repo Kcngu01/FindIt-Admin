@@ -150,6 +150,7 @@ class ApiController extends Controller
     
         if (Auth::guard('student')->attempt($credentials)) {
             $user = Auth::guard('student')->user();
+            /** @var \App\Models\Student $user */
             $token = $user->createToken('mobile-app-token')->plainTextToken;
             
             return response()->json([
@@ -394,13 +395,7 @@ class ApiController extends Controller
                         'similarity_matches' => count($similarityResult['matches']),
                         'message' => 'Item created successfully with ' . count($similarityResult['matches']) . ' potential matches'
                     ]);
-                } else if ($data['type'] == 'lost') {
-                    // Send notification for lost item with no matches
-                    $this->notificationService->sendNoMatchesNotification($item);
                 }
-            } else if ($data['type'] == 'lost') {
-                // If no image was uploaded for a lost item, send "no matches" notification
-                $this->notificationService->sendNoMatchesNotification($item);
             }
             
             // Return success if we got this far
