@@ -178,16 +178,41 @@ class ImageSimilarityController extends Controller
             foreach ($matches as $match) {
                 $matchData = [
                     'similarity_score' => $match['similarity'],
-                    'status' => 'available',
                 ];
                 
                 // Set lost item and found item based on types
                 if ($item->type === 'lost') {
                     $matchData['lost_item_id'] = $item->id;
                     $matchData['found_item_id'] = $match['item_id'];
+                    
+                    // Check if this lost item is involved in any pending matches or claims
+                    $hasPendingMatches = \App\Models\ItemMatch::where('lost_item_id', $item->id)
+                        ->whereIn('status', ['pending'])
+                        ->exists();
+                        
+                    $hasPendingClaims = \App\Models\Claim::where('lost_item_id', $item->id)
+                        ->whereIn('status', ['pending'])
+                        ->exists();
+                    
+                    // Set status based on whether there are pending matches or claims
+                    $matchData['status'] = ($hasPendingMatches || $hasPendingClaims) ? 'dismissed' : 'available';
+                    
                 } else {
+                    // If this is a found item, check if the lost item it's being matched with has pending matches/claims
                     $matchData['lost_item_id'] = $match['item_id'];
                     $matchData['found_item_id'] = $item->id;
+                    
+                    // Check if the lost item is involved in any pending matches or claims
+                    $hasPendingMatches = \App\Models\ItemMatch::where('lost_item_id', $match['item_id'])
+                        ->whereIn('status', ['pending'])
+                        ->exists();
+                        
+                    $hasPendingClaims = \App\Models\Claim::where('lost_item_id', $match['item_id'])
+                        ->whereIn('status', ['pending'])
+                        ->exists();
+                    
+                    // Set status based on whether there are pending matches or claims
+                    $matchData['status'] = ($hasPendingMatches || $hasPendingClaims) ? 'dismissed' : 'available';
                 }
                 
                 // Create the match record

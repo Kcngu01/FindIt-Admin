@@ -25,6 +25,9 @@ use Carbon\Carbon;
 use App\Models\FcmToken;
 use Laravel\Sanctum\HasApiTokens;
 use App\Models\Admin;
+use App\Models\Faculty;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\URL;
 
 class ApiController extends Controller
 {
@@ -502,19 +505,19 @@ class ApiController extends Controller
 
     public function updateItem(Request $request, string $id){
         try {
-            // Get item
-            $item = Item::find($id);
+            $item = Item::findOrFail($id);
             
-            if (!$item) {
-                Log::error('Item not found', ['id' => $id]);
+            // Check if item can be updated based on its status
+            if ($item->status !== 'active') {
+                Log::warning('Cannot update item: not in active status', ['id' => $id, 'status' => $item->status]);
                 return response()->json([
                     'success' => false,
-                    'message' => 'Item not found'
-                ], 404);
+                    'message' => 'This item cannot be updated because it is not in active status'
+                ], 403);
             }
-
+            
+            // Restore original restriction checks
             // Check if item can be edited based on matches and claims status
-            //item can only be edited if it does not involve in any pending, approved, or rejected matches
             $hasRestrictedMatches = ItemMatch::where(function($query) use ($item) {
                     $query->where('lost_item_id', $item->id)
                           ->orWhere('found_item_id', $item->id);
@@ -543,17 +546,9 @@ class ApiController extends Controller
                 ], 403);
             }
             
-            // For PATCH requests with multipart/form-data, extract fields directly
+            // Get the input data
             $input = [];
             
-            // Debug the request data
-            Log::info('Request method and content type', [
-                'method' => $request->method(),
-                'content_type' => $request->header('Content-Type'),
-                'has_files' => $request->hasFile('image') ? 'Yes' : 'No'
-            ]);
-            
-            // Extract fields manually from the request
             if ($request->has('name')) {
                 $input['name'] = $request->input('name');
                 $item->name = $input['name'];
@@ -576,6 +571,12 @@ class ApiController extends Controller
                 $input['color_id'] = $request->input('color_id');
                 $item->color_id = $input['color_id'];
                 Log::info('Color ID found in request', ['color_id' => $input['color_id']]);
+            }
+            
+            if ($request->has('claim_location_id')) {
+                $input['claim_location_id'] = $request->input('claim_location_id');
+                $item->claim_location_id = $input['claim_location_id'];
+                Log::info('Claim Location ID found in request', ['claim_location_id' => $input['claim_location_id']]);
             }
             
             if ($request->has('location_id')) {
@@ -611,6 +612,27 @@ class ApiController extends Controller
                     'success' => false,
                     'errors' => $validator->errors()
                 ], 422);
+            }
+            
+            // Track changes in category, color, or location
+            $metadataChanged = false;
+            $originalCategoryId = $item->getOriginal('category_id');
+            $originalColorId = $item->getOriginal('color_id');
+            $originalLocationId = $item->getOriginal('location_id');
+            
+            if ($originalCategoryId != $item->category_id || 
+                $originalColorId != $item->color_id || 
+                $originalLocationId != $item->location_id) {
+                $metadataChanged = true;
+                Log::info('Item metadata changed', [
+                    'id' => $id,
+                    'old_category' => $originalCategoryId,
+                    'new_category' => $item->category_id,
+                    'old_color' => $originalColorId,
+                    'new_color' => $item->color_id,
+                    'old_location' => $originalLocationId,
+                    'new_location' => $item->location_id
+                ]);
             }
             
             $imageChanged = false;
@@ -663,8 +685,8 @@ class ApiController extends Controller
                     }
                 }
                 
-                // Only process image with FastAPI if the image was changed
-                if ($imageChanged && $request->hasFile('image')) {
+                // Process image with FastAPI if either the image was changed or metadata was changed
+                if ($imageChanged || $metadataChanged) {
                     // First delete any existing matches to avoid duplicates
                     ItemMatch::where(function($query) use ($item) {
                         $query->where('lost_item_id', $item->id)
@@ -673,29 +695,105 @@ class ApiController extends Controller
                     ->whereIn('status', ['available', 'dismissed'])
                     ->delete();
                     
+                    Log::info('Deleted existing matches for item', ['item_id' => $item->id]);
+                    
                     // Get the image similarity controller
                     $imageSimilarityController = app(ImageSimilarityController::class);
                     
-                    // Process the image to get embeddings and find matches
-                    // This will create new matches internally in the ImageSimilarityController
-                    $result = $imageSimilarityController->processItemImage($request, $item);
-                    
-                    // Update the item with the new embedding
-                    if (isset($result['embedding']) && !empty($result['embedding'])) {
-                        $item->image_embeddings = $result['embedding'];
-                        $item->save();
+                    if ($imageChanged) {
+                        // If image changed, process the new image to get embeddings and find matches
+                        $result = $imageSimilarityController->processItemImage($request, $item);
+                        
+                        // Update the item with the new embedding
+                        if (isset($result['embedding']) && !empty($result['embedding'])) {
+                            $item->image_embeddings = $result['embedding'];
+                            $item->save();
+                        }
+                        
+                        // Send notifications based on matches
+                        if (isset($result['matches']) && !empty($result['matches'])) {
+                            Log::info('New matches found after image update', [
+                                'item_id' => $item->id,
+                                'matches_count' => count($result['matches'])
+                            ]);
+                            
+                            // Individual match notifications are already sent by processItemImage -> createMatches
+                            // No need for additional summary notification
+                        } else if ($item->type === 'lost') {
+                            // If no matches found for a lost item, send notification
+                            $this->notificationService->sendNoMatchesNotification($item);
+                            Log::info('No matches found after image update, notification sent', ['item_id' => $item->id]);
+                        }
+                    } else if ($metadataChanged && !$imageChanged && $item->image) {
+                        // If only metadata changed but image exists, we need to find matches based on the existing image
+                        // but with the new metadata
+                        
+                        // Create a modified request with the existing image
+                        $modifiedRequest = new Request($request->all());
+                        
+                        // Get the image path
+                        $imagePath = ($item->type === 'lost') 
+                            ? storage_path('app/public/lost_items/' . $item->image)
+                            : storage_path('app/public/found_items/' . $item->image);
+                        
+                        if (file_exists($imagePath)) {
+                            // Create a UploadedFile instance from the existing file
+                            // It's used to simulate a file upload when no new file was actually uploaded by the user. 
+                            // The true parameter in the UploadedFile constructor indicates "test mode." In test mode, the file is not expected to be moved from its temporary upload location to a new destination. This is important here because:
+                            // The file already exists in its final location
+                            // It prevents the system from attempting to move the file during processing
+                            // It tells Laravel this isn't a real upload from a form but a programmatically created file object
+                            // Without this flag set to true, Laravel might try to move the file and could encounter errors since it's not actually in a temporary upload location.
+                            $uploadedFile = new \Illuminate\Http\UploadedFile(
+                                $imagePath,
+                                $item->image,
+                                mime_content_type($imagePath),
+                                null,   //No specific file size is provided (will be determined automatically)
+                                true
+                            );
+                            
+                            // Add the file to the request
+                            $modifiedRequest->files->set('image', $uploadedFile);
+                            
+                            // Process with the existing image but new metadata
+                            $result = $imageSimilarityController->processItemImage($modifiedRequest, $item);
+                            
+                            // Update the item with the new embedding from the existing image
+                            if (isset($result['embedding']) && !empty($result['embedding'])) {
+                                $item->image_embeddings = $result['embedding'];
+                                $item->save();
+                                
+                                Log::info('Image embeddings updated after metadata change', [
+                                    'item_id' => $item->id
+                                ]);
+                            }
+                            
+                            // Send notifications based on matches
+                            if (isset($result['matches']) && !empty($result['matches'])) {
+                                Log::info('New matches found after metadata update', [
+                                    'item_id' => $item->id,
+                                    'matches_count' => count($result['matches'])
+                                ]);
+                                
+                                // Individual match notifications are already sent by processItemImage -> createMatches
+                                // No need for additional summary notification
+                            } else if ($item->type === 'lost') {
+                                // If no matches found for a lost item, send notification
+                                $this->notificationService->sendNoMatchesNotification($item);
+                                Log::info('No matches found after metadata update, notification sent', ['item_id' => $item->id]);
+                            }
+                        } else {
+                            Log::warning('Image file not found for metadata-only update', [
+                                'item_id' => $item->id,
+                                'image_path' => $imagePath
+                            ]);
+                        }
                     }
                     
-                    // Send a notification if no matches were found for a lost item
-                    if ($item->type === 'lost' && (!isset($result['matches']) || empty($result['matches']))) {
-                        $this->notificationService->sendNoMatchesNotification($item);
-                        Log::info('No matches found after image update, notification sent', ['item_id' => $item->id]);
-                    }
-                    
-                    Log::info('Image processed with FastAPI and embeddings updated', [
+                    Log::info('Item processed for matches after update', [
                         'item_id' => $item->id,
-                        'has_embedding' => isset($result['embedding']) && !empty($result['embedding']),
-                        'matches_count' => isset($result['matches']) ? count($result['matches']) : 0
+                        'image_changed' => $imageChanged,
+                        'metadata_changed' => $metadataChanged
                     ]);
                 }
                 

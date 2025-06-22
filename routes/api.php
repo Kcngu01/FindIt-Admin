@@ -13,9 +13,9 @@ use Illuminate\Support\Facades\Auth;
 
 $controller = ApiController::class;
 // Login endpoint for mobile app
-Route::post('/login', [ApiController::class,'login'])->name('login');
-Route::middleware('auth:sanctum')->post('/logout', [ApiController::class,'logout'])->name('logout');
-Route::post('/register', [ApiController::class,'register'])->name('register');
+Route::post('/login', [ApiController::class,'login'])->name('api.login');
+Route::middleware('auth:sanctum')->post('/logout', [ApiController::class,'logout'])->name('api.logout');
+Route::post('/register', [ApiController::class,'register'])->name('api.register');
 
 // Email verification routes
 Route::get('/email/verify/{id}/{hash}', [VerificationController::class, 'verify'])

@@ -128,7 +128,7 @@
             table.search($(this).val()).draw();
         });
 
-        $('.edit-category-btn').on('click',function(){
+        $('#categoryTable').on('click','.edit-category-btn',function(){
             const id= $(this).data('id');
             const name= $(this).data('name');
             $('#editCategoryName').val(name);

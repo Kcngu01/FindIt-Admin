@@ -128,7 +128,13 @@
             table.search($(this).val()).draw();
         });
 
-        $('.edit-colour-btn').on('click',function(){
+        // Use event delegation for edit buttons
+        //The click happens on the button
+        //The event "bubbles up" through parent elements
+        //jQuery catches it at the #colourTable level
+        //The .on('click', '.edit-colour-btn', function(){...}) checks if the clicked element matches .edit-colour-btn
+        //If it matches, the function runs
+        $('#colourTable').on('click', '.edit-colour-btn', function(){
             var id= $(this).data('id');
             var name= $(this).data('name');
             $('#editColourName').val(name);

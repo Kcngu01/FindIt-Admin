@@ -127,7 +127,7 @@
             table.search($(this).val()).draw();
         });
 
-        $('.edit-location-btn').on('click',function(){
+        $('#locationTable').on('click','.edit-location-btn',function(){
             const id= $(this).data('id');
             const name= $(this).data('name');
             $('#editLocationName').val(name);

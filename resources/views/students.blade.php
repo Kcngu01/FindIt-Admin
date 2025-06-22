@@ -29,7 +29,7 @@
                 </thead>
 
                 <tbody>
-                    @forelse($students as $student)
+                    @foreach($students as $student)
                     <tr>
                         <!-- <form method="POST" action="{{ route('students.destroy', $student->id) }}" onsubmit="return confirm('Are you sure you want to delete this user?');">
                             @csrf

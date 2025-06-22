@@ -25,6 +25,8 @@ class DatabaseSeeder extends Seeder
             StudentSeeder::class,
             CategorySeeder::class,
             FacultySeeder::class,
+            ColourSeeder::class,
+            LocationSeeder::class,
         ]);
     }
 }
